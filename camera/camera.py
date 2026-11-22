@@ -10,6 +10,7 @@ import pwd
 import secrets
 import socket
 import ssl
+import stat
 import subprocess
 import tempfile
 import threading
@@ -277,6 +278,34 @@ def photo(name):
     return path
 
 
+def gallery_details(root):
+    if not root.is_dir():
+        return []
+    entries = []
+    for directory, children, names, fd in os.fwalk(
+        root, follow_symlinks=False
+    ):
+        children[:] = [name for name in children if not name.startswith(".")]
+        relative = os.path.relpath(directory, root)
+        prefix = "" if relative == "." else relative + "/"
+        for name in names:
+            if name.startswith("."):
+                continue
+            try:
+                info = os.stat(name, dir_fd=fd, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
+            if stat.S_ISREG(info.st_mode):
+                entries.append(
+                    {
+                        "name": prefix + name,
+                        "saved": info.st_mtime,
+                        "bytes": info.st_size,
+                    }
+                )
+    return sorted(entries, key=lambda entry: entry["saved"], reverse=True)
+
+
 def save_framed_jpeg(source: Path, target: Path, state: dict) -> None:
     with Image.open(source) as image:
         # Sony may package the main JPEG and a secondary image as an MPO.
@@ -486,27 +515,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send(values)
             elif path == "/api/photos":
                 if urlsplit(self.path).query == "details=1":
-                    entries = []
-                    for item in PHOTOS.rglob("*"):
-                        name = item.relative_to(PHOTOS).as_posix()
-                        if item.is_dir() or any(
-                            part.startswith(".") for part in name.split("/")
-                        ):
-                            continue
-                        try:
-                            stat = photo(name).stat()
-                        except FileNotFoundError:
-                            continue
-                        entries.append(
-                            {
-                                "name": name,
-                                "saved": stat.st_mtime,
-                                "bytes": stat.st_size,
-                            }
-                        )
-                    self.send(
-                        sorted(entries, key=lambda p: p["saved"], reverse=True)
-                    )
+                    self.send(gallery_details(PHOTOS))
                     return
                 self.send(
                     sorted(

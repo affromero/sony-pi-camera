@@ -453,6 +453,13 @@ class CameraTest(unittest.TestCase):
         ) as folder:
             picture = Path(folder) / "card.jpg"
             picture.write_bytes(b"transfer")
+            hidden = Path(folder) / ".private"
+            hidden.mkdir()
+            (hidden / "hidden.jpg").write_bytes(b"hidden")
+            (Path(folder) / ".hidden.jpg").write_bytes(b"hidden")
+            (Path(folder) / "alias.jpg").symlink_to(picture)
+            (Path(folder) / "alias-dir").symlink_to(hidden)
+            os.mkfifo(Path(folder) / "pipe")
             os.utime(picture, (100, 100))
             relative = picture.relative_to(self.home / "camera-photos")
             with self.request("/api/photos?details=1", self.token) as result:
@@ -460,6 +467,16 @@ class CameraTest(unittest.TestCase):
             self.assertEqual(entries[0]["name"], "example.jpg")
             self.assertEqual(
                 entries[-1], {"name": str(relative), "saved": 100, "bytes": 8}
+            )
+            self.assertEqual(
+                [
+                    entry["name"]
+                    for entry in entries
+                    if entry["name"].startswith(
+                        relative.parent.as_posix() + "/"
+                    )
+                ],
+                [relative.as_posix()],
             )
             with self.request(f"/api/photos/{relative}", self.token) as result:
                 self.assertEqual(result.read(), b"transfer")
