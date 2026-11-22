@@ -3,6 +3,7 @@ mod gphoto;
 use gphoto::Camera;
 use std::{
     env,
+    ffi::CString,
     io::{self, Read, Write},
     sync::mpsc::{RecvTimeoutError, sync_channel},
     thread,
@@ -134,10 +135,43 @@ fn main() -> io::Result<()> {
                 .ok_or_else(|| io::Error::other("Probe frame count must be between 1 and 200"))?;
             probe(count)
         }
-        _ => Err(io::Error::other(
-            "Expected no arguments or --probe FRAME_COUNT",
-        )),
+        _ => camera_command(&args),
     }
+}
+
+fn camera_command(args: &[String]) -> io::Result<()> {
+    let camera = Camera::open()?;
+    let mut args = args.iter().map(String::as_str);
+    while let Some(arg) = args.next() {
+        let invalid = || io::Error::other(format!("Invalid camera argument: {arg}"));
+        match arg {
+            "--get-config" => {
+                camera.print_config(&CString::new(args.next().ok_or_else(invalid)?)?)?
+            }
+            "--set-config-value" => {
+                let (name, value) = args
+                    .next()
+                    .and_then(|item| item.split_once('='))
+                    .ok_or_else(invalid)?;
+                camera.set_config(&CString::new(name)?, value)?;
+            }
+            "--wait-event=2s" => camera.wait(Duration::from_secs(2))?,
+            "--keep" => {
+                if args.next() != Some("--capture-image-and-download")
+                    || args.next() != Some("--filename")
+                {
+                    return Err(invalid());
+                }
+                let filename = args.next().ok_or_else(invalid)?;
+                if args.next().is_some() {
+                    return Err(invalid());
+                }
+                return camera.capture(filename);
+            }
+            _ => return Err(invalid()),
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

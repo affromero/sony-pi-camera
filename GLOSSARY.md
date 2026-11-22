@@ -9,7 +9,7 @@
 | Explicit FTPS | FTP with a TLS upgrade. The optional receiver on the Pi accepts camera uploads on port 2121 and uses separate connections for file data. |
 | Flexible Spot | A Sony focus area you can position within the frame. Tap-to-focus moves the spot and asks the camera to autofocus. |
 | Focus magnifier | Drag a box to enlarge part of the live view. The orange rectangle marks the camera's current viewport. Pressing the dashboard shutter saves that region as a cropped JPEG on the Pi. |
-| gPhoto2 | The command-line tool the Pi uses to request settings, focus, live previews and captures through libgphoto2. |
+| libgphoto2 | The USB camera library used by the Rust backend for settings, focus, preview and capture. |
 | PC Remote | Sony's USB mode for tethered shooting. On the tested α7 III, it provides capture and control while existing card folders are unavailable to the Pi. |
 | Pi photo library | The files under `~/camera-photos`. The gallery shows copies captured or transferred to the Pi. |
 | SSH tunnel | A port forward that lets a browser reach the Pi's loopback camera service through an authenticated SSH connection. |

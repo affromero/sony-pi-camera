@@ -19,11 +19,10 @@ Power the Pi separately. Connect the camera to the Pi's USB data port using a da
 
 ```sh
 sudo apt update
-sudo apt install git gphoto2 libimage-exiftool-perl openssl python3-pil
+sudo apt install git cargo libgphoto2-dev libimage-exiftool-perl openssl python3-pil
 git clone https://github.com/affromero/sony-pi-camera.git
 cd sony-pi-camera
-gphoto2 --auto-detect
-gphoto2 --summary
+cargo build --locked --release --manifest-path camera/rust-preview/Cargo.toml
 sudo sh camera/install.sh
 ```
 
@@ -58,34 +57,12 @@ ssh user@hostname.local 'cat ~/.config/sony-pi-camera/camera-token'
 
 On iPhone or iPad, transfer the verified public certificate to the device and install its profile. In **Settings → General → About → Certificate Trust Settings**, enable trust for that certificate, then open the Pi's HTTPS address in Safari. [Apple’s certificate trust instructions](https://support.apple.com/en-us/102390)
 
-## Experimental Rust USB preview
+## USB preview
 
-The optional worker holds one libgphoto2 session for preview frames. Before
-another USB command runs, the camera service stops the worker and waits for
-it to exit. The worker also releases USB after five seconds without a preview
-request. Enable it after checking your camera in PC Remote mode.
-The installer defaults to the CLI preview until the Rust worker has been
-verified with the α7 III's settings and still-capture workflow.
-
-On the Pi, install Rust 1.85 or later, Cargo, and `libgphoto2-dev`. From the
-checkout, build and install the worker after running the camera installer.
-
-```sh
-cargo build --locked --release --manifest-path camera/rust-preview/Cargo.toml
-sudo install -m 755 camera/rust-preview/target/release/sony-pi-preview /opt/pi-camera/sony-pi-preview
-sudo systemctl edit "sony-pi-camera@$USER.service"
-```
-
-Add this drop-in and restart the camera service.
-
-```ini
-[Service]
-Environment=PI_CAMERA_RUST_PREVIEW=/opt/pi-camera/sony-pi-preview
-```
-
-Use the journal to inspect worker errors. To return to the CLI preview,
-remove this environment setting and restart the service. The viewer keeps
-its existing refresh interval by default.
+Rust 1.85 or newer is required to build the backend. Rust handles every USB
+operation through libgphoto2. Preview reuses a USB session and releases it
+after five idle seconds or before settings, focus or capture opens its own
+session. Use the service journal to inspect USB errors.
 
 For a continuous preview on the private admin page, add
 `PRIVATE_PREVIEW_STREAM=1` to `/etc/sony-pi-viewer-$USER.conf` and restart
@@ -95,7 +72,8 @@ the existing snapshot refresh interval.
 
 ### Compare USB preview backends
 
-With the camera service and other camera apps stopped, run from the checkout:
+Install the `gphoto2` CLI for the benchmark. Stop the camera service and
+other camera apps, then run from the checkout.
 
 ```sh
 uv run --frozen python benchmark_preview.py --worker /opt/pi-camera/sony-pi-preview --frames 60
@@ -104,12 +82,9 @@ uv run --frozen python benchmark_preview.py --worker /opt/pi-camera/sony-pi-prev
 Both paths fetch a native JPEG and read its viewport. The JSON reports first
 frame and subsequent latencies, native dimensions, wall-clock frame rate, and
 byte-identical neighbors alongside the installed gPhoto2 versions. It then
-measures a CLI viewport read after Rust releases USB, followed by the first
+measures a Rust viewport read after the preview worker releases USB, followed by the first
 Rust frame after reopening. Use a moving subject to expose repeated images.
 This comparison leaves the shutter untouched.
-
-Before replacing the CLI default, also verify repeated preview → still
-capture → preview cycles and USB reconnect on the actual camera.
 
 ## Shooting and reviewing photos
 
@@ -228,7 +203,7 @@ node --check camera/camera.js
 (cd camera/sidedoor && npm ci && npm test)
 ```
 
-The dashboard uses Pillow for cropped JPEGs. Camera operations and thumbnails also need the system commands `gphoto2` and `exiftool`. The Pi installer runs services under the OS Python. For local receiver development, `uv sync --frozen --extra ftps` installs pyftpdlib and pyOpenSSL. Update dependencies in `pyproject.toml`, run `uv lock` and commit the updated lockfile.
+The dashboard uses Pillow for cropped JPEGs and `exiftool` for thumbnails. The Pi installer runs services under the OS Python. For local receiver development, `uv sync --frozen --extra ftps` installs pyftpdlib and pyOpenSSL. Update dependencies in `pyproject.toml`, run `uv lock` and commit the updated lockfile.
 
 The tests start the HTTP service on loopback, use a temporary photo library and simulate the USB device. CI checks the lockfile, imports the optional FTPS receiver and runs the tests on Python 3.11 and 3.13. Test changes to capture, focus or magnification on a connected body before reporting hardware support.
 

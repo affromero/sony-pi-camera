@@ -1,4 +1,4 @@
-"""Pipe transport for the optional native preview worker."""
+"""Pipe transport for the native USB preview worker."""
 
 import os
 import selectors
@@ -17,7 +17,7 @@ class RustPreview:
             executable.is_file() and os.access(executable, os.X_OK)
         ):
             raise ValueError(
-                "Rust preview requires an executable absolute path"
+                f"Rust camera backend requires an executable at {executable}"
             )
         self.executable = executable
         self.timeout = timeout
@@ -76,6 +76,9 @@ class RustPreview:
                 if not jpeg.startswith(b"\xff\xd8"):
                     raise RuntimeError("Rust preview did not return a JPEG")
                 return jpeg, ratio, point
-        except (OSError, RuntimeError):
-            self.stop()
+        except (OSError, RuntimeError) as error:
+            try:
+                self.stop()
+            except RuntimeError as cleanup_error:
+                error.add_note(str(cleanup_error))
             raise
