@@ -68,6 +68,27 @@ The live view requests one JPEG at a time over USB. When you focus, change a set
 - Press the shutter in a magnified view to save that framing as a JPEG in the Pi gallery. The Pi crops the camera's full-resolution JPEG at its native pixel size, so a tighter crop has fewer pixels. Choose a JPEG or RAW + JPEG capture setting for framed shots. At **Full frame**, the shutter downloads the camera files directly.
 - Existing SD card folders are unavailable over this body's PC Remote connection. The gallery also picks up photos transferred into the same directory.
 
+## Daily photos
+
+The installer provides an optional systemd timer. It starts disabled and defaults to 08:00 in the Pi's timezone. Leave the camera powered on in PC Remote mode. Each run saves a photo in the dashboard gallery using the camera's current settings and framing, including any active magnifier crop.
+
+To choose a time, run `sudo systemctl edit "sony-pi-capture@$USER.timer"` on the Pi. For example, to shoot at 08:00 Chicago time, enter the following override. The empty line after the first equals sign clears the default schedule. Add more `OnCalendar` entries for additional shots each day.
+
+```ini
+[Timer]
+OnCalendar=
+OnCalendar=*-*-* 08:00:00 America/Chicago
+```
+
+Enable the timer and check its next run:
+
+```sh
+sudo systemctl enable --now "sony-pi-capture@$USER.timer"
+systemctl list-timers --all "sony-pi-capture@$USER.timer"
+```
+
+The timer skips missed times while the Pi is off. If another camera command is running, the job waits up to one minute for its turn. To take one photo immediately, run `sudo systemctl start "sony-pi-capture@$USER.service"`. Check filenames or errors with `journalctl -u "sony-pi-capture@$USER.service" -n 10`. To stop future shots, run `sudo systemctl disable --now "sony-pi-capture@$USER.timer"`.
+
 ## Optional camera uploads over Wi-Fi
 
 The optional explicit FTPS receiver accepts the configured camera's IPv4 address and writes uploads to the gallery. It permits legacy TLS for older Sony firmware. Use it only on a trusted LAN. Reserve the Pi and camera addresses in DHCP.
@@ -87,6 +108,7 @@ Copy the Pi's public `~/.config/sony-pi-camera/transfer-ca.crt` to an SD card as
 ```mermaid
 flowchart LR
     browser["Browser"] <-->|"HTTPS 8766 or SSH tunnel to 8765"| api["Camera service"]
+    timer["Optional daily systemd timer"] -->|"Authenticated local capture request"| api
     api -->|"One USB request at a time"| gphoto["gPhoto2"]
     gphoto <-->|"USB PC Remote"| sony["Sony α7 III"]
     gphoto -->|"Captured originals"| photos[("Pi photo library")]

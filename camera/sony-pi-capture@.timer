@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Sony camera photo for %i
+
+[Timer]
+OnCalendar=*-*-* 08:00:00
+AccuracySec=1s
+Persistent=false
+
+[Install]
+WantedBy=timers.target

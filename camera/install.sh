@@ -74,9 +74,11 @@ fi
 install -d -m 755 /opt/pi-camera
 install -m 644 "$project_dir/camera.py" "$project_dir/camera.html" \
   "$project_dir/camera.js" "$project_dir/camera.css" \
-  "$project_dir/transfer.py" /opt/pi-camera/
+  "$project_dir/transfer.py" "$project_dir/scheduled_capture.py" /opt/pi-camera/
 install -m 644 "$project_dir/sony-pi-camera@.service" /etc/systemd/system/
 install -m 644 "$project_dir/pi-camera-transfer@.service" /etc/systemd/system/
+install -m 644 "$project_dir/sony-pi-capture@.service" \
+  "$project_dir/sony-pi-capture@.timer" /etc/systemd/system/
 systemctl daemon-reload
 if [ -f /etc/systemd/system/pi-field-notes-camera@.service ]; then
   systemctl disable --now "pi-field-notes-camera@$SUDO_USER.service"

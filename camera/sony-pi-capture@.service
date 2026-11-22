@@ -1,0 +1,15 @@
+[Unit]
+Description=Take a scheduled Sony camera photo for %i
+Requires=sony-pi-camera@%i.service
+After=sony-pi-camera@%i.service
+
+[Service]
+Type=oneshot
+User=%i
+ExecStart=/usr/bin/python3 /opt/pi-camera/scheduled_capture.py
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+RestrictAddressFamilies=AF_INET
+TimeoutStartSec=6min

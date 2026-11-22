@@ -313,6 +313,25 @@ class CameraTest(unittest.TestCase):
         self.addCleanup(saved.unlink)
         self.assertEqual(saved.read_bytes(), original.read_bytes())
 
+    def test_scheduled_job_saves_a_gallery_photo(self):
+        (self.home / "viewport").write_text("Current: 0\nCurrent: 20971734")
+        Image.new("RGB", (72, 48)).save(self.home / "original.jpg")
+        job = subprocess.run(
+            [sys.executable, str(SERVER.with_name("scheduled_capture.py"))],
+            env=dict(
+                os.environ, HOME=str(self.home), PI_CAMERA_PORT=str(self.port)
+            ),
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        name = job.stdout.strip().removeprefix("Saved ")
+        saved = self.home / "camera-photos" / name
+        self.addCleanup(saved.unlink)
+        with self.request("/api/photos", self.token) as response:
+            self.assertIn(name, json.load(response))
+
     def test_delete_requires_same_origin_and_deletes_selected_photo(self):
         with self.assertRaises(urllib.error.HTTPError) as error:
             self.request(
