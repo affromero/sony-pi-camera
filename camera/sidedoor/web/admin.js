@@ -87,6 +87,7 @@ async function loadSessions(current) {
 
 function renderAi(data) {
   byId('ai-enabled').checked = data.enabled;
+  byId('ai-required').checked = data.requireAdvice;
   byId('ai-provider').replaceChildren(new Option('Choose provider', ''),
     ...data.providers.map(({ id, label }) => new Option(label ?? id, id)));
   byId('ai-provider').value = data.provider;
@@ -136,9 +137,9 @@ byId('issue').onsubmit = (event) => {
     const password = field.value;
     field.value = '';
     await post('/access/reauthenticate', { password });
-    const { code } = await post('/access/issue-invitation');
+    const { code, origin } = await post('/access/issue-invitation');
     if (generation !== current) return;
-    inviteLink.value = location.origin + '/#invite=' + encodeURIComponent(code);
+    inviteLink.value = origin + '/#invite=' + encodeURIComponent(code);
     inviteLink.hidden = inviteLink.labels[0].hidden = false;
     inviteLink.focus();
     inviteLink.select();
@@ -152,6 +153,7 @@ ai.onsubmit = (event) => {
     key.value = '';
     const result = await post('/ai', {
       enabled: byId('ai-enabled').checked,
+      requireAdvice: byId('ai-required').checked,
       provider: byId('ai-provider').value,
       model: byId('ai-model').value,
       prompt: byId('ai-prompt').value,

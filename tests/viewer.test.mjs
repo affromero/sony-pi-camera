@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { createViewer, initializeAdmin } from '../camera/sidedoor/web/server.mjs';
+import { createCamera } from '../camera/sidedoor/web/camera.mjs';
+import { createRelay } from '../camera/sidedoor/web/relay.mjs';
 
 const origin = 'https://camera.example.test';
 const password = 'valid-admin-password';
@@ -63,11 +65,21 @@ test('keeps viewer invitations read-only and admin AI credentials private', asyn
   t.after(() => rm(directory, { recursive: true, force: true }));
   await initializeAdmin(directory, password);
   const privatePort = await listen(upstream);
-  const server = await createViewer({ origin, directory, port: privatePort, cameraToken: 'camera-key' });
+  const camera = createCamera({ port: privatePort, cameraToken: 'camera-key' });
+  const server = await createViewer({ origin, directory, camera });
+  const broker = await createViewer({ origin, directory, camera, mode: 'guest' });
+  const socket = join(directory, 'guest.sock');
+  await new Promise((resolve) => broker.listen(socket, resolve));
+  const relay = createRelay(socket);
+  const relayPort = await listen(relay);
+  t.after(() => relay.close());
+  t.after(() => broker.close());
   t.after(() => server.close());
   const port = await listen(server);
   const get = (path, cookie) => call(port, path, { cookie });
   const post = (path, body, cookie, site) => call(port, path, { method: 'POST', body, cookie, site });
+  const guestGet = (path, cookie) => call(relayPort, path, { cookie });
+  const guestPost = (path, body, cookie) => call(relayPort, path, { method: 'POST', body, cookie });
 
   assert.equal((await get('/photos')).status, 401);
   assert.equal((await call(port, '/', { host: 'wrong.example.test' })).status, 403);
@@ -78,17 +90,23 @@ test('keeps viewer invitations read-only and admin AI credentials private', asyn
   assert.equal((await get('/session', owner.cookie)).data.role, 'admin');
   const invitation = await post('/access/issue-invitation', { uses: null }, owner.cookie);
   assert.equal(invitation.status, 200);
-  const redeemed = await post('/access/redeem-invitation', { code: invitation.data.code });
+  const redeemed = await guestPost('/access/redeem-invitation', { code: invitation.data.code });
   assert.equal(redeemed.status, 200);
   const guest = redeemed.cookie;
-  assert.equal((await post('/access/redeem-invitation', { code: invitation.data.code })).status, 401);
-  assert.equal((await get('/session', guest)).data.role, 'viewer');
-  assert.deepEqual((await get('/photos', guest)).data, [{ name: 'nonempty/a %.raw' }]);
-  const downloads = await get('/download/nonempty%2Fa%20%25.raw', guest);
+  assert.equal((await guestPost('/access/redeem-invitation', { code: invitation.data.code })).status, 401);
+  assert.equal((await guestGet('/session', guest)).data.role, 'viewer');
+  assert.equal((await guestGet('/session', owner.cookie)).status, 403);
+  assert.equal((await guestPost('/access/logout', {}, owner.cookie)).status, 403);
+  assert.equal((await guestPost('/access/login', { password })).status, 404);
+  assert.equal((await guestGet('/settings', guest)).status, 404);
+  assert.equal((await guestPost('/delete', { name: 'nonempty/a %.raw' }, guest)).status, 404);
+  assert.equal((await guestPost('/ai', {}, guest)).status, 404);
+  assert.deepEqual((await guestGet('/photos', guest)).data, [{ name: 'nonempty/a %.raw' }]);
+  const downloads = await guestGet('/download/nonempty%2Fa%20%25.raw', guest);
   assert.equal(downloads.data.toString(), 'original');
   assert.match(downloads.headers['content-disposition'], /^attachment/);
   assert.match(downloads.headers['cache-control'], /no-store/);
-  assert.equal((await get('/download/%2e%2e%2Ffile', guest)).status, 404);
+  assert.equal((await guestGet('/download/%2e%2e%2Ffile', guest)).status, 404);
   assert.equal((await get('/settings', guest)).status, 403);
   assert.equal((await post('/setting', { name: 'iso', value: '400' }, guest)).status, 403);
   assert.equal((await post('/delete', { name: 'nonempty/a %.raw' }, guest)).status, 403);
@@ -97,7 +115,7 @@ test('keeps viewer invitations read-only and admin AI credentials private', asyn
   assert.equal((await post('/access/issue-invitation', {}, guest)).status, 403);
   assert.equal((await get('/api/advice-input', owner.cookie)).status, 404);
   assert.equal((await post('/access/configure-household', { password }, owner.cookie)).status, 404);
-  const previews = await Promise.all([get('/preview', guest), get('/preview', owner.cookie)]);
+  const previews = await Promise.all([guestGet('/preview', guest), get('/preview', owner.cookie)]);
   assert.ok(previews.every(({ status, data }) => status === 200 && data.toString() === 'jpeg'));
   assert.equal(previewCalls, 1);
 
@@ -111,11 +129,11 @@ test('keeps viewer invitations read-only and admin AI credentials private', asyn
   assert.equal((await post('/setting', { name: 'iso', value: '400' }, owner.cookie)).status, 200);
   assert.equal((await get('/settings', owner.cookie)).data.iso, '400');
   assert.equal((await post('/delete', { name: 'nonempty/a %.raw' }, owner.cookie)).status, 200);
-  assert.deepEqual((await get('/photos', guest)).data, []);
+  assert.deepEqual((await guestGet('/photos', guest)).data, []);
 
   const sessions = await get('/access/sessions', owner.cookie);
   const activeViewer = sessions.data.sessions.find(({ admission }) => admission === 'invitation');
   assert.ok(activeViewer);
   assert.equal((await post('/access/revoke-session', { id: activeViewer.id }, owner.cookie)).status, 200);
-  assert.equal((await get('/photos', guest)).status, 401);
+  assert.equal((await guestGet('/photos', guest)).status, 401);
 });

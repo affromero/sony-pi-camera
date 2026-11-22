@@ -77,6 +77,7 @@ install -m 644 "$project_dir/camera.py" "$project_dir/camera.html" \
   "$project_dir/camera.js" "$project_dir/camera.css" \
   "$project_dir/transfer.py" "$project_dir/scheduled_capture.py" /opt/pi-camera/
 install -d -m 755 /opt/pi-camera/sidedoor/web
+getent group sony-camera-viewer >/dev/null || groupadd --system sony-camera-viewer
 install -m 644 "$project_dir/sidedoor/advice.mjs" \
   "$project_dir/sidedoor/ai-config.mjs" "$project_dir/sidedoor/package.json" \
   "$project_dir/sidedoor/package-lock.json" /opt/pi-camera/sidedoor/
@@ -87,7 +88,8 @@ install -m 644 "$project_dir/sony-pi-capture@.service" \
   "$project_dir/sony-pi-schedule@.socket" \
   "$project_dir/sony-pi-schedule@.service" \
   "$project_dir/sony-pi-capture@.timer" \
-  "$project_dir/sony-pi-viewer@.service" /etc/systemd/system/
+  "$project_dir/sony-pi-viewer@.service" \
+  "$project_dir/sony-pi-public-viewer@.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now "sony-pi-schedule@$SUDO_USER.socket"
 systemctl try-restart "sony-pi-schedule@$SUDO_USER.service"

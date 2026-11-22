@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { chmod, readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -74,9 +74,10 @@ export async function initializeAdmin(directory, password) {
   });
 }
 
-export async function createViewer({ origin, directory, ...cameraOptions }) {
+export async function createViewer({ origin, directory, mode = 'admin', inviteOrigin = origin, camera }) {
+  const guest = mode === 'guest';
   const publicUrl = new URL(origin);
-  if (publicUrl.protocol !== 'https:' || publicUrl.origin !== origin || !cameraOptions.cameraToken)
+  if (publicUrl.protocol !== 'https:' || publicUrl.origin !== origin || !camera)
     throw new Error('Invalid viewer configuration');
 
   const store = accessStore(directory);
@@ -90,7 +91,6 @@ export async function createViewer({ origin, directory, ...cameraOptions }) {
   });
   const sidedoor = createAccessHandler({ access, origin, cookieName, name: 'Sony Live Camera' });
   const ai = createAiConfig(directory);
-  const camera = createCamera(cameraOptions);
   let checkingPassword = false;
 
   function browserRequest(request, body) {
@@ -108,15 +108,19 @@ export async function createViewer({ origin, directory, ...cameraOptions }) {
     if (!/^[\w-]{43}$/.test(token ?? '')) throw new AccessError('unauthorized');
     const { principal, session } = await access.authenticate(token);
     const admin = session.principalId !== null && principal?.role === 'owner' && session.principalId === principal.id;
-    if (admin) return { role: 'admin' };
-    if (ownerOnly || session.principalId !== null || session.admission !== 'invitation') throw new AccessError('forbidden');
+    if (admin && !guest) return { role: 'admin' };
+    if (!guest || ownerOnly || session.principalId !== null || session.admission !== 'invitation')
+      throw new AccessError('forbidden');
     return { role: 'viewer' };
   }
 
   async function handleAccess(request, response, action) {
+    if (guest !== (action === 'redeem-invitation') && action !== 'logout')
+      return send(response, 404, { error: 'Not found.' });
     if (!(request.method === 'GET' && ['invitations', 'sessions'].includes(action)) &&
         !(request.method === 'POST' && accessPosts.has(action))) return send(response, 404, { error: 'Not found.' });
     if (ownerAccess.has(action)) await authenticate(request, true);
+    if (guest && action === 'logout') await authenticate(request, false);
     let body;
     if (request.method === 'POST') {
       body = await readJson(request);
@@ -131,6 +135,8 @@ export async function createViewer({ origin, directory, ...cameraOptions }) {
       const result = await sidedoor(browserRequest(request, body), action);
       const cookie = result.headers.get('Set-Cookie');
       if (cookie) response.setHeader('Set-Cookie', cookie);
+      if (action === 'issue-invitation' && result.ok)
+        return send(response, result.status, { ...(await result.json()), origin: inviteOrigin });
       send(response, result.status, Buffer.from(await result.arrayBuffer()), 'application/json');
     } finally {
       if (check) checkingPassword = false;
@@ -154,11 +160,17 @@ export async function createViewer({ origin, directory, ...cameraOptions }) {
     if (request.headers.host !== publicUrl.host) return send(response, 403, { error: 'Forbidden.' });
     const path = request.url;
     const route = request.method + ' ' + path;
+    if (guest && !(request.method === 'GET' && (
+      ['/', '/viewer.css', '/viewer.js', '/admin.js', '/session', '/photos', '/preview'].includes(path) ||
+      /^\/download\/[^/?]+$/.test(path)
+    )) && !(request.method === 'POST' && ['/access/redeem-invitation', '/access/logout'].includes(path)))
+      return send(response, 404, { error: 'Not found.' });
     if (request.method === 'POST' && (request.headers.origin !== origin ||
         request.headers['sec-fetch-site'] === 'cross-site')) return send(response, 403, { error: 'Forbidden.' });
     if (path.startsWith('/access/')) return handleAccess(request, response, path.slice(8));
     if (request.method === 'GET' && assets.has(path)) {
       const [body, type] = assets.get(path);
+      if (guest && path === '/') return send(response, 200, body.toString().replace('<body>', '<body data-guest>'), type);
       return send(response, 200, body, type);
     }
     if (route === 'GET /session') return send(response, 200, await authenticate(request, false));
@@ -219,12 +231,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.log('Camera admin configured.');
   } else {
     const cameraToken = (await readFile(join(homedir(), '.config/sony-pi-camera/camera-token'), 'utf8')).trim();
-    const server = await createViewer({
-      origin: process.env.VIEWER_ORIGIN,
-      directory,
-      cameraToken,
-      port: Number(process.env.PI_CAMERA_PORT ?? 8765),
-    });
-    server.listen(8770, '127.0.0.1');
+    if (!cameraToken || process.env.ADMIN_ORIGIN === process.env.VIEWER_ORIGIN)
+      throw new Error('Configure separate admin and viewer origins and a camera key');
+    const camera = createCamera({ cameraToken, port: Number(process.env.PI_CAMERA_PORT ?? 8765) });
+    const options = { directory, camera };
+    const admin = await createViewer({ ...options, origin: process.env.ADMIN_ORIGIN, inviteOrigin: process.env.VIEWER_ORIGIN });
+    const broker = await createViewer({ ...options, origin: process.env.VIEWER_ORIGIN, mode: 'guest' });
+    admin.listen(join(process.env.RUNTIME_DIRECTORY, 'admin.sock'));
+    const brokerPath = join(process.env.RUNTIME_DIRECTORY, 'guest.sock');
+    broker.listen(brokerPath, async () => { await chmod(brokerPath, 0o660); });
   }
 }
