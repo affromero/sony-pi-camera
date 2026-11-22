@@ -103,18 +103,12 @@ Open the private admin URL and create a link under **Viewer invitations**. Share
 
 The installer provides an optional systemd timer. It starts disabled and defaults to 08:00 in the Pi's timezone. Leave the camera powered on in PC Remote mode. Each run saves a photo in the dashboard gallery using the camera's current settings and framing, including any active magnifier crop.
 
-To choose a time, run `sudo systemctl edit "sony-pi-capture@$USER.timer"` on the Pi. For example, to shoot at 08:00 Chicago time, enter the following override. The empty line after the first equals sign clears the default schedule. Add more `OnCalendar` entries for additional shots each day.
-
-```ini
-[Timer]
-OnCalendar=
-OnCalendar=*-*-* 08:00:00 America/Chicago
-```
-
-Enable the timer and check its next run:
+In the private camera dashboard, open **Scheduled captures**. Choose a
+time and zone, add more times if needed, then select **Enable daily
+captures** and **Save schedule**. Clear the checkbox and save to pause.
+Check the next run on the Pi with:
 
 ```sh
-sudo systemctl enable --now "sony-pi-capture@$USER.timer"
 systemctl list-timers --all "sony-pi-capture@$USER.timer"
 ```
 

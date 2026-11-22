@@ -493,6 +493,85 @@ function syncPhotos() { if (token && !document.hidden) photos(); }
 setInterval(syncPhotos, 5000);
 document.addEventListener('visibilitychange', syncPhotos);
 function start() { syncVisibleSettings(); syncPhotos(); }
+function addScheduleTime(value = '') {
+  const row = document.createElement('div');
+  const label = document.createElement('label');
+  label.textContent = 'Daily time ';
+  const input = document.createElement('input');
+  input.type = 'time';
+  input.value = value;
+  label.append(input);
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'secondary';
+  remove.textContent = 'Remove';
+  remove.onclick = () => { row.remove(); scheduleEdited(); };
+  row.append(label, remove);
+  $('schedule-times').append(row);
+  return input;
+}
+function scheduleEdited() {
+  $('schedule-status').textContent = 'Unsaved changes';
+}
+function showSchedule(schedule) {
+  $('schedule-times').replaceChildren();
+  schedule.times.forEach(value => addScheduleTime(value));
+  $('schedule-zone').value = schedule.timezone;
+  $('schedule-enabled').checked = schedule.enabled;
+  $('schedule-status').textContent = schedule.enabled
+    ? 'Scheduled daily at ' + schedule.times.join(', ') + ' (' + schedule.timezone + ').'
+    : 'Daily captures are off.';
+}
+let scheduleLoaded = false;
+let scheduleLoading = false;
+async function loadSchedule() {
+  if (scheduleLoaded || scheduleLoading || !token) return;
+  scheduleLoading = true;
+  $('schedule-retry').hidden = true;
+  $('schedule-status').textContent = 'Reading schedule…';
+  try {
+    const response = await api('/api/schedule');
+    showSchedule(await response.json());
+    scheduleLoaded = true;
+    $('schedule-fields').disabled = false;
+  } catch (error) {
+    $('schedule-status').textContent = error.message;
+    $('schedule-retry').hidden = false;
+  } finally {
+    scheduleLoading = false;
+  }
+}
+$('capture-schedule').ontoggle = () => { if ($('capture-schedule').open) loadSchedule(); };
+$('schedule-retry').onclick = loadSchedule;
+$('schedule-form').oninput = scheduleEdited;
+$('schedule-add').onclick = () => { addScheduleTime().focus(); scheduleEdited(); };
+for (const zone of new Set(['UTC', ...(Intl.supportedValuesOf?.('timeZone') || [])])) {
+  $('schedule-zones').append(new Option(zone));
+}
+$('schedule-form').onsubmit = async event => {
+  event.preventDefault();
+  if (!scheduleLoaded || $('schedule-fields').disabled) return;
+  const enabled = $('schedule-enabled').checked;
+  const times = Array.from($('schedule-times').querySelectorAll('input'), input => input.value);
+  if (times.includes('') || !times.length) {
+    $('schedule-status').textContent = 'Choose a time for each daily capture.';
+    return;
+  }
+  if (new Set(times).size !== times.length) {
+    $('schedule-status').textContent = 'Choose a different time for each capture.';
+    return;
+  }
+  $('schedule-fields').disabled = true;
+  $('schedule-status').textContent = 'Saving schedule…';
+  try {
+    const response = await post('/api/schedule', {enabled, times, timezone: $('schedule-zone').value.trim()});
+    showSchedule(await response.json());
+  } catch (error) {
+    $('schedule-status').textContent = error.message;
+  } finally {
+    $('schedule-fields').disabled = false;
+  }
+};
 if (token) start();
 else {
   $('login').hidden = false;

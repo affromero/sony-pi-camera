@@ -50,3 +50,11 @@ jobs:
         run: uv run --frozen --extra ftps python -m unittest discover -s tests -v
       - name: Import optional FTPS receiver
         run: uv run --frozen --extra ftps python -c "from camera.transfer import CameraTransfer"
+      - name: Verify dashboard scheduling with systemd
+        if: matrix.python == '3.13'
+        env:
+          RUNNER_ENVIRONMENT: ${{ runner.environment }}
+        run: |
+          sudo apt-get install --yes python3-pil
+          sudo sh camera/install.sh
+          uv run --frozen python tests/systemd_schedule_smoke.py

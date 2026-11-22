@@ -73,6 +73,7 @@ if [ ! -e "$config_dir/transfer-password" ]; then
 fi
 install -d -m 755 /opt/pi-camera
 install -m 644 "$project_dir/camera.py" "$project_dir/camera.html" \
+  "$project_dir/schedule.py" \
   "$project_dir/camera.js" "$project_dir/camera.css" \
   "$project_dir/transfer.py" "$project_dir/scheduled_capture.py" /opt/pi-camera/
 install -d -m 755 /opt/pi-camera/sidedoor/web
@@ -84,10 +85,14 @@ install -m 644 "$project_dir/sidedoor/web/"* /opt/pi-camera/sidedoor/web/
 install -m 644 "$project_dir/sony-pi-camera@.service" /etc/systemd/system/
 install -m 644 "$project_dir/pi-camera-transfer@.service" /etc/systemd/system/
 install -m 644 "$project_dir/sony-pi-capture@.service" \
+  "$project_dir/sony-pi-schedule@.socket" \
+  "$project_dir/sony-pi-schedule@.service" \
   "$project_dir/sony-pi-capture@.timer" \
   "$project_dir/sony-pi-viewer@.service" \
   "$project_dir/sony-pi-public-viewer@.service" /etc/systemd/system/
 systemctl daemon-reload
+systemctl enable --now "sony-pi-schedule@$SUDO_USER.socket"
+systemctl try-restart "sony-pi-schedule@$SUDO_USER.service"
 if [ -f /etc/systemd/system/pi-field-notes-camera@.service ]; then
   systemctl disable --now "pi-field-notes-camera@$SUDO_USER.service"
 fi
