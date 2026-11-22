@@ -12,6 +12,7 @@ import time
 import unittest
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest import mock
 
@@ -122,6 +123,28 @@ class ApertureTest(unittest.TestCase):
                 camera.setting("f-number")["choices"], ["f/1.2", "f/16"]
             )
 
+    def test_settings_snapshot_preserves_mode_limits_and_battery(self):
+        spec = importlib.util.spec_from_file_location("camera", SERVER)
+        camera = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(camera)
+        blocks = {
+            "expprogram": "Current: A",
+            "iso": "Current: 64\nChoice: 0 25\nChoice: 1 64",
+            "shutterspeed": "Current: 1/200\nChoice: 0 1/200",
+            "batterylevel": "Current: 72%",
+        }
+        names = ("expprogram", *camera.SETTINGS, "batterylevel")
+        output = "".join(
+            blocks.get(name, "Current: Automatic") + "\nEND\n"
+            for name in names
+        )
+        with mock.patch.object(camera, "command", return_value=output):
+            data = camera.settings_snapshot()
+        self.assertEqual(data["mode"], "A")
+        self.assertEqual(data["battery"], "72%")
+        self.assertEqual(data["iso"]["choices"], ["64"])
+        self.assertTrue(data["shutterspeed"]["readonly"])
+
 
 class CameraTest(unittest.TestCase):
     @classmethod
@@ -147,6 +170,7 @@ class CameraTest(unittest.TestCase):
             'printf "Current: %s\\n" "$(cat "$HOME/quality")"; '
             'else cat "$HOME/viewport"; fi;;\n'
             '--keep) touch "$HOME/shutter"; out="${4%.%C}"; '
+            'while [ -e "$HOME/hold-shutter" ]; do sleep 0.02; done; '
             'cp "$HOME/original.jpg" "$out.jpg";;\n'
             "*) exit 1;;\nesac\n"
         )
@@ -197,6 +221,43 @@ class CameraTest(unittest.TestCase):
             self.assertEqual(response.headers["X-Magnification"], "5.9")
             self.assertEqual(response.headers["X-Magnifier-X"], "0.5")
             self.assertEqual(response.headers["X-Magnifier-Y"], "0.5")
+
+    def test_camera_refuses_competing_operations_during_capture(self):
+        (self.home / "viewport").write_text("Current: 0\nCurrent: 20971734")
+        Image.new("RGB", (96, 64)).save(self.home / "original.jpg")
+        shutter = self.home / "shutter"
+        shutter.unlink(missing_ok=True)
+        hold = self.home / "hold-shutter"
+        hold.touch()
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            capture = pool.submit(
+                self.request, "/api/capture", self.token, {}, self.base
+            )
+            try:
+                for _ in range(100):
+                    if shutter.exists():
+                        break
+                    time.sleep(0.02)
+                self.assertTrue(shutter.exists())
+                for path, data in [
+                    ("/api/preview", None),
+                    ("/api/settings", None),
+                    ("/api/focus", {"x": 0.5, "y": 0.5}),
+                ]:
+                    with self.assertRaises(urllib.error.HTTPError) as error:
+                        self.request(path, self.token, data, self.base)
+                    with error.exception as response:
+                        self.assertEqual(response.code, 409)
+                        self.assertIn(
+                            "Camera busy", json.load(response)["error"]
+                        )
+            finally:
+                hold.unlink()
+            with capture.result() as response:
+                (name,) = json.load(response)["files"]
+                (self.home / "camera-photos" / name).unlink()
+        with self.request("/api/preview", self.token) as response:
+            self.assertEqual(response.read(), b"frame")
 
     def test_capture_saves_magnified_sensor_region_with_orientation(self):
         viewport = {"ratio": 5.9, "x": 0.75, "y": 0.25}

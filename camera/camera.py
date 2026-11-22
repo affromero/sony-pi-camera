@@ -12,6 +12,8 @@ import subprocess
 import tempfile
 import threading
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from fractions import Fraction
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -25,6 +27,7 @@ TOKEN_FILE = Path.home() / ".config/sony-pi-camera/camera-token"
 PORT = int(os.environ.get("PI_CAMERA_PORT", "8765"))
 LAN_PORT = 8766
 LOCK = threading.Lock()
+CONTROL = threading.Lock()
 SETTINGS = (
     "iso",
     "shutterspeed",
@@ -36,6 +39,31 @@ SETTINGS = (
     "exposurecompensation",
     "imagequality",
 )
+
+
+class CameraBusy(Exception):
+    """Another request owns or has reserved the camera."""
+
+
+@contextmanager
+def camera_read() -> Iterator[None]:
+    if CONTROL.locked() or not LOCK.acquire(blocking=False):
+        raise CameraBusy("Camera busy. Waiting for the current operation.")
+    try:
+        yield
+    finally:
+        LOCK.release()
+
+
+@contextmanager
+def camera_control() -> Iterator[None]:
+    if not CONTROL.acquire(blocking=False):
+        raise CameraBusy("Camera busy. Finish the current operation first.")
+    try:
+        with LOCK:
+            yield
+    finally:
+        CONTROL.release()
 
 
 def command(*args, cwd=None):
@@ -62,7 +90,10 @@ def shutter_available(value, mode):
 
 
 def setting(name, mode=None):
-    output = command("--get-config", name)
+    return parse_setting(name, command("--get-config", name), mode)
+
+
+def parse_setting(name, output, mode=None):
     result = {"choices": []}
     for line in output.splitlines():
         if line.startswith("Current: "):
@@ -96,6 +127,24 @@ def setting(name, mode=None):
             if value.startswith("f/") and 1.2 <= float(value[2:]) <= 16
         ]
     return result
+
+
+def settings_snapshot():
+    names = ("expprogram", *SETTINGS, "batterylevel")
+    args = [arg for name in names for arg in ("--get-config", name)]
+    blocks = command(*args).split("\nEND\n")
+    if len(blocks) != len(names) + 1:
+        raise RuntimeError("The camera returned an incomplete settings list.")
+    mode = parse_setting("expprogram", blocks[0]).get("current", "Unavailable")
+    values = {
+        name: parse_setting(name, block, mode)
+        for name, block in zip(SETTINGS, blocks[1:-2], strict=True)
+    }
+    values["mode"] = mode
+    values["battery"] = parse_setting("batterylevel", blocks[-2]).get(
+        "current", "Unavailable"
+    )
+    return values
 
 
 def focus_at(x, y):
@@ -356,7 +405,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             if path == "/api/preview":
-                with LOCK, tempfile.TemporaryDirectory() as directory:
+                with camera_read(), tempfile.TemporaryDirectory() as directory:
                     output = command(
                         "--capture-preview",
                         "--filename",
@@ -371,23 +420,19 @@ class Handler(BaseHTTPRequestHandler):
                     if not images:
                         raise RuntimeError("Camera returned no preview")
                     state = viewport(output)
-                    self.send(
-                        images[0].read_bytes(),
-                        "image/jpeg",
-                        headers={
-                            "X-Magnification": str(state["ratio"]),
-                            "X-Magnifier-X": str(state["x"]),
-                            "X-Magnifier-Y": str(state["y"]),
-                        },
-                    )
+                    frame = images[0].read_bytes()
+                self.send(
+                    frame,
+                    "image/jpeg",
+                    headers={
+                        "X-Magnification": str(state["ratio"]),
+                        "X-Magnifier-X": str(state["x"]),
+                        "X-Magnifier-Y": str(state["y"]),
+                    },
+                )
             elif path == "/api/settings":
-                with LOCK:
-                    mode = setting("expprogram").get("current", "Unavailable")
-                    values = {name: setting(name, mode) for name in SETTINGS}
-                    values["battery"] = setting("batterylevel").get(
-                        "current", "Unavailable"
-                    )
-                    values["mode"] = mode
+                with camera_read():
+                    values = settings_snapshot()
                 self.send(values)
             elif path == "/api/photos":
                 if urlsplit(self.path).query == "details=1":
@@ -450,6 +495,8 @@ class Handler(BaseHTTPRequestHandler):
                 )
             else:
                 self.send({"error": "Not found"}, status=404)
+        except CameraBusy as exc:
+            self.send({"error": str(exc)}, status=409)
         except (
             OSError,
             ValueError,
@@ -474,13 +521,13 @@ class Handler(BaseHTTPRequestHandler):
             data = json.loads(self.rfile.read(length) or b"{}")
             path = urlsplit(self.path).path
             if path == "/api/capture":
-                with LOCK:
+                with camera_control():
                     files = capture_photo(data.get("viewport"))
                 self.send({"ok": True, "files": files})
             elif path == "/api/magnifier":
                 action = data.get("action")
                 if action == "region":
-                    with LOCK:
+                    with camera_control():
                         state = magnify_region(
                             data.get("x"),
                             data.get("y"),
@@ -491,18 +538,18 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 if action not in ("", "exit", "left", "right", "up", "down"):
                     raise ValueError("Unknown magnifier action")
-                with LOCK:
+                with camera_control():
                     state = move_magnifier(*magnifier_steps(action))
                 self.send({"ok": True, **state})
             elif path == "/api/focus":
-                with LOCK:
+                with camera_control():
                     result = focus_at(data["x"], data["y"])
                 self.send(result)
             elif path == "/api/setting":
                 name, value = data["name"], data["value"]
                 if name not in SETTINGS or not isinstance(value, str):
                     raise ValueError("Invalid setting")
-                with LOCK:
+                with camera_control():
                     mode = setting("expprogram").get("current")
                     current = setting(name, mode)
                     if (
@@ -522,6 +569,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send({"ok": True})
             else:
                 self.send({"error": "Not found"}, status=404)
+        except CameraBusy as exc:
+            self.send({"error": str(exc)}, status=409)
         except (
             OSError,
             ValueError,

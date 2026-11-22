@@ -21,3 +21,7 @@ dialog{border:0;padding:0;border-radius:14px;width:min(1100px,calc(100vw - 32px)
 .mag-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-top:1px solid #eee;padding:12px 20px;font-size:13px}
 #mag-level{font-variant-numeric:tabular-nums}
 #mag-help{color:#59595f}
+#camera-controls{border:0;padding:0;margin:0;min-width:0}
+#camera-controls:disabled .shutter,#camera-controls:disabled .secondary{opacity:.5;cursor:wait}
+#camera-controls:disabled #focus-target{cursor:wait}
+#camera-activity{position:absolute;top:12px;left:12px;padding:6px 10px;border-radius:12px;background:#1c1c1ee6;color:white;font-size:13px;pointer-events:none}

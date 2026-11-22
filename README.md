@@ -45,6 +45,8 @@ ssh user@hostname.local 'cat ~/.config/sony-pi-camera/camera-token'
 
 ## Shooting and reviewing photos
 
+The live view requests one JPEG at a time over USB. When you focus, change a setting, move the magnifier or take a photo, the dashboard holds the last frame and pauses the camera controls. Live view resumes when the operation finishes. Another browser attempting a camera command at the same time receives a busy message.
+
 - Set the lens to AF and the camera's focus area to Flexible Spot. Tap the live preview to move the focus point and autofocus. A green marker indicates the body reported a lock.
 - Choose **Select area to magnify** below the live preview, then drag a box around the detail you want to inspect. On a phone you can also tap its center. The camera uses its supported magnification steps. The orange outline on the overview shows the area it actually displays. Choose **Full frame** to select another area or tap to focus.
 - The dashboard polls the battery level, shooting mode and settings. APS-C crop is adjustable on the body and displayed in the browser. Aperture choices currently assume the tested Sigma lens.

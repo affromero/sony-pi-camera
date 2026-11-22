@@ -1,7 +1,11 @@
 const $ = id => document.getElementById(id);
 let token = location.hash.slice(1) || sessionStorage.getItem('camera-token');
 if (location.hash) { sessionStorage.setItem('camera-token', token); history.replaceState(null, '', '/'); }
-let busy = false;
+let operation = '';
+let externalBusy = false;
+let pendingPreview = null;
+let previewTimer;
+let previewDelay = 50;
 let imageUrl;
 let modalUrl;
 let modalName;
@@ -15,13 +19,30 @@ $('preview').parentElement.append(overview);
 const fullFrame = overview.cloneNode();
 let selecting = false;
 let dragging = null;
-let moving = false;
 let magnified = false;
 let displayedViewport = null;
-let previewRevision = 0;
-let capturing = false;
 function updateShutter() {
-  $('capture').disabled = !displayedViewport || selecting || moving || capturing;
+  $('capture').disabled = !displayedViewport || selecting;
+}
+function updateActivity() {
+  const message = operation || (externalBusy ? 'Camera in use. Waiting…' : '');
+  $('camera-controls').disabled = Boolean(message);
+  $('camera-activity').hidden = !message;
+  $('camera-activity').textContent = message;
+}
+async function withCamera(label, action) {
+  if (operation || externalBusy) return;
+  operation = label;
+  updateActivity();
+  clearTimeout(previewTimer);
+  try {
+    await pendingPreview;
+    if (!externalBusy) await action();
+  } finally {
+    operation = '';
+    updateActivity();
+    schedulePreview(externalBusy ? Math.max(500, previewDelay) : 0);
+  }
 }
 const surface = $('focus-target');
 function selectionMode(enabled) {
@@ -42,26 +63,18 @@ function selectionMode(enabled) {
 }
 $('mag-select').onclick = () => selectionMode(!selecting);
 async function moveMagnifier(request) {
-  if (moving) return;
-  moving = true;
-  previewRevision++;
-  displayedViewport = null;
-  updateShutter();
-  $('mag-select').disabled = $('mag-exit').disabled = true;
-  $('mag-help').textContent = request.action === 'exit' ? 'Returning to full frame…' : 'Moving the camera magnifier…';
-  try {
-    await post('/api/magnifier', request);
-    selectionMode(false);
-  } catch (error) {
-    selectionMode(false);
-    $('mag-help').textContent = error.message;
-  } finally {
-    moving = false;
-    previewRevision++;
-    displayedViewport = null;
-    updateShutter();
-    $('mag-select').disabled = $('mag-exit').disabled = false;
-  }
+  const label = request.action === 'exit' ? 'Returning to full frame…' : 'Magnifying selection…';
+  await withCamera(label, async () => {
+    try {
+      await post('/api/magnifier', request);
+      selectionMode(false);
+    } catch (error) {
+      selectionMode(false);
+      $('mag-help').textContent = error.message;
+    } finally {
+      await refreshAfterFramingChange();
+    }
+  });
 }
 $('mag-exit').onclick = () => moveMagnifier({action:'exit'});
 function previewGeometry() {
@@ -77,7 +90,7 @@ function selectionPoint(event) {
   return {x:clamp((event.clientX-g.box.left-g.left)/g.width), y:clamp((event.clientY-g.box.top-g.top)/g.height)};
 }
 surface.onpointerdown = event => {
-  if (!selecting || moving || dragging || event.button !== 0) return;
+  if (!selecting || operation || externalBusy || dragging || event.button !== 0) return;
   const {box,width,height,left,top} = previewGeometry();
   if (event.clientX < box.left + left || event.clientX > box.left + left + width ||
       event.clientY < box.top + top || event.clientY > box.top + top + height) return;
@@ -105,9 +118,9 @@ surface.onpointerup = event => {
 };
 surface.onpointercancel = () => { dragging = null; $('mag-selection').hidden = true; };
 surface.onkeydown = event => {
-  if (event.key === 'Escape' && selecting && !moving) selectionMode(false);
+  if (event.key === 'Escape' && selecting && !operation) selectionMode(false);
 };
-function showMagnifier(response) {
+function showMagnifier(response, frame) {
   const ratio = Number(response.headers.get('X-Magnification')) || 1;
   const active = ratio > 1;
   if (magnified && !active) $('preview-status').textContent = 'Tap to focus';
@@ -120,15 +133,15 @@ function showMagnifier(response) {
   $('capture').title = label;
   updateShutter();
   overview.hidden = !active;
-  if (active && selecting && !moving) selectionMode(false);
+  if (active && selecting) selectionMode(false);
   magnified = active;
   $('mag-select').hidden = active;
-  $('mag-select').disabled = moving;
+  $('mag-select').disabled = false;
   $('mag-exit').hidden = !active;
   $('mag-level').textContent = ratio + '×';
   $('focus-target').hidden = active;
   if (!active) {
-    fullFrame.getContext('2d').drawImage($('preview'), 0, 0, 160, 107);
+    fullFrame.getContext('2d').drawImage(frame, 0, 0, 160, 107);
     return;
   }
   $('focus-marker').hidden = true;
@@ -141,46 +154,92 @@ function showMagnifier(response) {
 async function api(path, options = {}) {
   const headers = {'X-Camera-Token': token || '', ...options.headers};
   const response = await fetch(path, {...options, headers});
-  if (!response.ok) { const data = await response.json(); throw new Error(data.error || 'Camera unavailable'); }
+  if (!response.ok) {
+    if (response.status === 409) {
+      externalBusy = true;
+      updateActivity();
+    }
+    const data = await response.json();
+    const error = new Error(data.error || 'Camera unavailable');
+    error.status = response.status;
+    throw error;
+  }
   return response;
 }
 async function post(path, value) { return api(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(value)}); }
-async function preview() {
-  if (!busy && !moving && !capturing) {
-    const revision = previewRevision;
+function schedulePreview(delay = previewDelay) {
+  clearTimeout(previewTimer);
+  if (!token || document.hidden || operation || pendingPreview) return;
+  previewTimer = setTimeout(async () => {
+    if (document.hidden || operation) return;
+    pendingPreview = readPreview(false);
     try {
-      const response = await api('/api/preview');
-      const url = URL.createObjectURL(await response.blob());
-      $('preview').src = url;
-      $('preview').hidden = false;
-      await $('preview').decode();
-      if (revision === previewRevision) showMagnifier(response);
-      if (imageUrl) URL.revokeObjectURL(imageUrl);
-      imageUrl = url;
-      $('preview-message').hidden = true;
-      $('status').textContent = 'Connected';
-    } catch (error) {
-      displayedViewport = null;
-      updateShutter();
-      if (selecting && !moving) selectionMode(false);
-      $('mag-select').disabled = true;
-      overview.hidden = true;
-      surface.hidden = true;
-      $('focus-marker').hidden = true;
-      $('status').textContent = error.message.includes('Could not claim') ? 'Camera busy. Retrying.' : 'Camera unavailable. Retrying.';
-      $('status').title = error.message;
-      $('preview').hidden = true;
-      $('preview-message').hidden = false;
-      $('preview-message').textContent = 'Preview unavailable';
+      await pendingPreview;
+    } finally {
+      pendingPreview = null;
+      schedulePreview();
     }
+  }, delay);
+}
+async function refreshAfterFramingChange() {
+  displayedViewport = null;
+  updateShutter();
+  surface.disabled = true;
+  $('mag-select').disabled = $('mag-exit').disabled = true;
+  if (!document.hidden) await readPreview(true);
+}
+async function readPreview(afterOperation) {
+  let url;
+  const stale = () => document.hidden || (operation && !afterOperation);
+  try {
+    const response = await api('/api/preview');
+    const blob = await response.blob();
+    if (stale()) return;
+    const frame = new Image();
+    url = URL.createObjectURL(blob);
+    frame.src = url;
+    await frame.decode();
+    if (stale()) return;
+    $('preview').src = url;
+    $('preview').hidden = false;
+    surface.disabled = false;
+    $('mag-exit').disabled = false;
+    showMagnifier(response, frame);
+    if (imageUrl) URL.revokeObjectURL(imageUrl);
+    imageUrl = url;
+    url = null;
+    $('preview-message').hidden = true;
+    $('status').textContent = 'Connected';
+    $('status').title = '';
+    if (externalBusy) {
+      externalBusy = false;
+      updateActivity();
+    }
+    previewDelay = 50;
+  } catch (error) {
+    previewDelay = Math.min(4000, Math.max(500, previewDelay * 2));
+    if (stale() || error.status === 409) return;
+    displayedViewport = null;
+    updateShutter();
+    if (selecting) selectionMode(false);
+    $('mag-select').disabled = true;
+    overview.hidden = true;
+    surface.hidden = true;
+    $('focus-marker').hidden = true;
+    $('status').textContent = error.message.includes('Could not claim') ? 'Camera busy. Retrying.' : 'Camera unavailable. Retrying.';
+    $('status').title = error.message;
+    $('preview').hidden = true;
+    $('preview-message').hidden = false;
+    $('preview-message').textContent = 'Preview unavailable';
+  } finally {
+    if (url) URL.revokeObjectURL(url);
   }
-  setTimeout(preview, 500);
 }
 const labels = {'iso':'ISO','shutterspeed':'Shutter speed','f-number':'Aperture','whitebalance':'White balance','focusmode':'Focus mode','exposurecompensation':'Exposure compensation','imagequality':'Image quality'};
 labels.sensorcrop = 'APS-C crop (1.5×)';
 labels.focusarea = 'Focus area';
 $('focus-target').onclick = async event => {
-  if (moving || magnified) return;
+  if (operation || externalBusy || magnified) return;
   if (selecting) {
     if (!event.detail) moveMagnifier({action:'region',x:0.5,y:0.5,width:0,height:0});
     return;
@@ -192,22 +251,20 @@ $('focus-target').onclick = async event => {
   const x = event.detail ? (event.clientX - box.left - left) / width : 0.5;
   const y = event.detail ? (event.clientY - box.top - top) / height : 0.5;
   if (x < 0 || x > 1 || y < 0 || y > 1) return;
-  target.disabled = true;
-  const marker = $('focus-marker');
-  marker.hidden = true;
-  $('preview-status').textContent = 'Focusing…';
-  try {
-    const result = await (await post('/api/focus', {x,y})).json();
-    marker.style.left = (left + result.x * width) / box.width * 100 + '%';
-    marker.style.top = (top + result.y * height) / box.height * 100 + '%';
-    marker.dataset.locked = String(result.locked);
-    marker.hidden = false;
-    $('preview-status').textContent = result.locked ? 'Focus locked' : 'Focus lock unconfirmed';
-  } catch (error) {
-    $('preview-status').textContent = error.message;
-  } finally {
-    target.disabled = false;
-  }
+  await withCamera('Focusing…', async () => {
+    const marker = $('focus-marker');
+    marker.hidden = true;
+    try {
+      const result = await (await post('/api/focus', {x,y})).json();
+      marker.style.left = (left + result.x * width) / box.width * 100 + '%';
+      marker.style.top = (top + result.y * height) / box.height * 100 + '%';
+      marker.dataset.locked = String(result.locked);
+      marker.hidden = false;
+      $('preview-status').textContent = result.locked ? 'Focus locked' : 'Focus lock unconfirmed';
+    } catch (error) {
+      $('preview-status').textContent = error.message;
+    }
+  });
 };
 async function downloadPhoto(name) {
   const blob = await (await api(`/api/photos/${encodeURIComponent(name)}`)).blob();
@@ -315,7 +372,6 @@ function showBattery(raw) {
   $('battery').title = known ? 'The α7 III charges its battery when switched off.' : 'Camera battery status unavailable';
 }
 async function settings() {
-  busy = true;
   try {
     const data = await (await api('/api/settings')).json();
     showBattery(data.battery);
@@ -334,19 +390,19 @@ async function settings() {
         select.setAttribute('aria-describedby', feedback.id);
         select.addEventListener('change', async () => {
           const requested = select.value;
-          busy = true;
-          select.disabled = true;
-          feedback.textContent = '';
-          try {
-            await post('/api/setting', {name, value:requested});
-          } catch (error) {
-            feedback.textContent = label + ' change failed. ' + error.message;
-            if (name === 'focusmode' && requested !== 'Manual' && error.message.includes('reports Manual')) {
-              feedback.textContent += '. Check that the AF/MF switch on the lens is set to AF.';
+          select.value = select.dataset.confirmed;
+          await withCamera('Updating ' + label + '…', async () => {
+            feedback.textContent = '';
+            try {
+              await post('/api/setting', {name, value:requested});
+            } catch (error) {
+              feedback.textContent = label + ' change failed. ' + error.message;
+              if (name === 'focusmode' && requested !== 'Manual' && error.message.includes('reports Manual')) {
+                feedback.textContent += '. Check that the AF/MF switch on the lens is set to AF.';
+              }
             }
-          } finally {
-            await settings();
-          }
+            if (!externalBusy) await settings();
+          });
         });
         wrapper.append(select, feedback); $('settings').append(wrapper);
         if (name === 'sensorcrop') {
@@ -364,10 +420,14 @@ async function settings() {
         select.dataset.choices = choices;
       }
       select.value = available ? value.current : '';
+      select.dataset.confirmed = select.value;
       select.disabled = value.readonly || !value.choices.length || controlledByMode(name, data.mode);
       select.title = select.disabled ? 'Unavailable in the current camera mode or configuration' : '';
     }
-  } catch (error) { showBattery(null); $('status').textContent = error.message; } finally { busy = false; }
+  } catch (error) {
+    if (error.status !== 409) showBattery(null);
+    $('status').textContent = error.message;
+  }
 }
 let library = [];
 let libraryRequest = 0;
@@ -414,29 +474,25 @@ async function photos() {
 }
 updateShutter();
 $('capture').onclick = async () => {
-  if ($('capture').disabled) return;
+  if ($('capture').matches(':disabled')) return;
   const viewport = displayedViewport;
-  capturing = true;
-  updateShutter();
-  $('capture-status').textContent = 'Capturing…';
-  try {
-    await post('/api/capture', {viewport});
-    $('capture-status').textContent = viewport.ratio > 1 ? 'Cropped photo saved' : 'Photo saved';
-    await photos();
-  } catch (error) {
-    $('capture-status').textContent = error.message;
-  } finally {
-    capturing = false;
-    displayedViewport = null;
-    previewRevision++;
-    updateShutter();
-  }
+  await withCamera('Capturing…', async () => {
+    try {
+      await post('/api/capture', {viewport});
+      $('capture-status').textContent = viewport.ratio > 1 ? 'Cropped photo saved' : 'Photo saved';
+      await photos();
+    } catch (error) {
+      $('capture-status').textContent = error.message;
+    } finally {
+      await refreshAfterFramingChange();
+    }
+  });
 };
 for (const id of ['photo-from','photo-through','photo-sort']) $(id).onchange = renderPhotos;
 function syncPhotos() { if (token && !document.hidden) photos(); }
 setInterval(syncPhotos, 5000);
 document.addEventListener('visibilitychange', syncPhotos);
-function start() { settings().then(preview); photos(); }
+function start() { syncVisibleSettings(); syncPhotos(); }
 if (token) start();
 else {
   $('login').hidden = false;
@@ -447,7 +503,12 @@ else {
   };
 }
 function syncVisibleSettings() {
-  if (token && !busy && !document.hidden) settings();
+  if (document.hidden) {
+    clearTimeout(previewTimer);
+    return;
+  }
+  if (token && !selecting && !externalBusy) withCamera('Reading camera settings…', settings);
+  else schedulePreview();
 }
 document.addEventListener('visibilitychange', syncVisibleSettings);
 setInterval(syncVisibleSettings, 10000);
