@@ -1,5 +1,6 @@
 """Exercise camera access and photo management through HTTP."""
 
+import base64
 import importlib.util
 import io
 import json
@@ -19,6 +20,7 @@ from unittest import mock
 from PIL import Image
 
 SERVER = Path(__file__).resolve().parents[1] / "camera/camera.py"
+SCHEDULE = SERVER.with_name("scheduled_capture.py")
 
 
 class ApertureTest(unittest.TestCase):
@@ -166,7 +168,14 @@ class CameraTest(unittest.TestCase):
             'case "$1" in\n'
             "--capture-preview) printf frame > preview.jpg; "
             "printf 'Current: 59\\nCurrent: 20971734\\n';;\n"
-            '--get-config) if [ "$2" = "imagequality" ]; then '
+            '--get-config) if [ "$2" = "expprogram" ]; then '
+            'while [ "$#" -gt 0 ]; do '
+            'case "$2" in '
+            "expprogram) printf 'Current: M\\n';; "
+            "iso) printf 'Current: 100\\nReadonly: 0\\nChoice: 0 400\\n';; "
+            "*) printf 'Current: Auto\\n';; esac; "
+            "printf 'END\\n'; shift 2; done; "
+            'elif [ "$2" = "imagequality" ]; then '
             'printf "Current: %s\\n" "$(cat "$HOME/quality")"; '
             'else cat "$HOME/viewport"; fi;;\n'
             '--keep) touch "$HOME/shutter"; out="${4%.%C}"; '
@@ -222,6 +231,78 @@ class CameraTest(unittest.TestCase):
             self.assertEqual(response.headers["X-Magnifier-X"], "0.5")
             self.assertEqual(response.headers["X-Magnifier-Y"], "0.5")
 
+    def test_advice_input_requires_key_and_returns_preview_with_settings(self):
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            self.request("/api/advice-input")
+        self.assertEqual(error.exception.code, 403)
+        with self.request("/api/advice-input", self.token) as response:
+            data = json.load(response)
+        self.assertEqual(base64.b64decode(data["jpeg"]), b"frame")
+        self.assertEqual(data["magnification"], 5.9)
+        self.assertEqual(data["settings"]["mode"], "M")
+        self.assertEqual(data["settings"]["iso"]["choices"], ["400"])
+
+    def test_timer_shoots_only_after_successful_advice_when_enabled(self):
+        config = self.home / "ai.json"
+        shutter = self.home / "shutter"
+        (self.home / "viewport").write_text("Current: 0\nCurrent: 20971734")
+        Image.new("RGB", (96, 64)).save(self.home / "original.jpg")
+        runtime = self.home / "node"
+        runtime.write_text(
+            "#!/bin/sh\n"
+            "cat > /dev/null\n"
+            'if [ -e "$HOME/shutter" ]; then exit 1; fi\n'
+            'if [ -e "$HOME/provider-fails" ]; then\n'
+            "  printf '%s\\n' 'AI provider request failed.' >&2\n"
+            "  exit 1\n"
+            "fi\n"
+            "printf '%s\\n' "
+            """'{"assessment":"Raise ISO","suggestions":[]}'\n"""
+        )
+        runtime.chmod(0o700)
+        env = os.environ.copy()
+        env.update(
+            HOME=str(self.home),
+            PI_CAMERA_PORT=str(self.port),
+            STATE_DIRECTORY=str(self.home),
+        )
+        env["PATH"] = str(self.home) + os.pathsep + env["PATH"]
+        failure = self.home / "provider-fails"
+
+        def run_timer():
+            shutter.unlink(missing_ok=True)
+            return subprocess.run(
+                [sys.executable, str(SCHEDULE)],
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+
+        try:
+            ordinary = run_timer()
+            self.assertEqual(ordinary.returncode, 0, ordinary.stderr)
+            self.assertTrue(shutter.exists())
+            self.assertNotIn("AI advice:", ordinary.stdout)
+
+            config.write_text('{"enabled": true}')
+            enabled = run_timer()
+            self.assertEqual(enabled.returncode, 0, enabled.stderr)
+            self.assertIn("Raise ISO", enabled.stdout)
+            self.assertIn("Saved", enabled.stdout)
+            self.assertTrue(shutter.exists())
+
+            failure.touch()
+            failed = run_timer()
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertIn("provider request failed", failed.stderr)
+            self.assertFalse(shutter.exists())
+        finally:
+            config.unlink(missing_ok=True)
+            runtime.unlink(missing_ok=True)
+            failure.unlink(missing_ok=True)
+
     def test_camera_refuses_competing_operations_during_capture(self):
         (self.home / "viewport").write_text("Current: 0\nCurrent: 20971734")
         Image.new("RGB", (96, 64)).save(self.home / "original.jpg")
@@ -242,6 +323,7 @@ class CameraTest(unittest.TestCase):
                 for path, data in [
                     ("/api/preview", None),
                     ("/api/settings", None),
+                    ("/api/advice-input", None),
                     ("/api/focus", {"x": 0.5, "y": 0.5}),
                 ]:
                     with self.assertRaises(urllib.error.HTTPError) as error:

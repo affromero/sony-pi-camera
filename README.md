@@ -68,6 +68,36 @@ The live view requests one JPEG at a time over USB. When you focus, change a set
 - Press the shutter in a magnified view to save that framing as a JPEG in the Pi gallery. The Pi crops the camera's full-resolution JPEG at its native pixel size, so a tighter crop has fewer pixels. Choose a JPEG or RAW + JPEG capture setting for framed shots. At **Full frame**, the shutter downloads the camera files directly.
 - Existing SD card folders are unavailable over this body's PC Remote connection. The gallery also picks up photos transferred into the same directory.
 
+## Share the live camera
+
+The optional Sidedoor viewer has its own hostname and access rules. Use the admin password to view and download photos, change camera settings, delete Pi copies, configure AI advice, and issue viewer invitations. Each invitation works once within 24 hours. The viewer can see the live preview and download the entire Pi gallery, including future captures and uploads. A viewer session lasts 30 days on the browser that accepted it. Use **Show active viewers** to revoke one early. The private Pi dashboard and other projects keep their own access.
+
+Install Node.js 22 or newer on the Pi, with `node` on systemd's PATH. Debian's `build-essential` and `python3` supply the native build tools needed by Sidedoor. Run the camera installer, then install the pinned dependencies and create the admin in a Bash shell on the Pi. Use a strong, unique password.
+
+```sh
+sudo npm ci --prefix /opt/pi-camera/sidedoor
+viewer_state="/var/lib/sony-pi-camera-$USER"
+sudo install -d -m 700 -o "$USER" "$viewer_state"
+read -r -s -p 'Camera admin password: ' viewer_password
+printf '\n'
+printf '%s\n' "$viewer_password" | STATE_DIRECTORY="$viewer_state" \
+  node /opt/pi-camera/sidedoor/web/server.mjs setup
+unset viewer_password
+```
+
+Replace `camera.example.com` with the viewer's HTTPS hostname.
+
+```sh
+printf '%s\n' 'VIEWER_ORIGIN=https://camera.example.com' | \
+  sudo tee "/etc/sony-pi-viewer-$USER.conf" >/dev/null
+sudo chmod 600 "/etc/sony-pi-viewer-$USER.conf"
+sudo systemctl enable --now "sony-pi-viewer@$USER.service"
+```
+
+Publish that hostname with an HTTPS reverse proxy or a Cloudflare Tunnel pointing to `http://127.0.0.1:8770` on the Pi. Preserve the public `Host` header and bypass proxy caching for the viewer hostname. Keep the camera API on port 8765 and the Pi dashboard off the public route. Check the viewer service with `systemctl status "sony-pi-viewer@$USER.service"`. [Cloudflare published applications](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/routing-to-tunnel/)
+
+Open the public URL as admin, expand **Viewer invitations**, and create a link. Send the link privately to the recipient. A second recipient needs a new link.
+
 ## Daily photos
 
 The installer provides an optional systemd timer. It starts disabled and defaults to 08:00 in the Pi's timezone. Leave the camera powered on in PC Remote mode. Each run saves a photo in the dashboard gallery using the camera's current settings and framing, including any active magnifier crop.
@@ -89,6 +119,14 @@ systemctl list-timers --all "sony-pi-capture@$USER.timer"
 
 The timer skips missed times while the Pi is off. If another camera command is running, the job waits up to one minute for its turn. To take one photo immediately, run `sudo systemctl start "sony-pi-capture@$USER.service"`. Check filenames or errors with `journalctl -u "sony-pi-capture@$USER.service" -n 10`. To stop future shots, run `sudo systemctl disable --now "sony-pi-capture@$USER.timer"`.
 
+### Optional AI advice before capture
+
+The timer can send one JPEG preview and the camera's current exposure and white balance settings to a vision model through Sidedoor. Give it a goal such as “Keep moving subjects sharp and lift dark shadows.” The job logs an assessment and any suggested values the camera reports as writable. Suggestions appear in the systemd journal, and the shutter uses the camera's current settings. Camera controls are available again while the model runs, so a manual change can affect the subsequent shot.
+
+Sign in as admin and open **AI advice for scheduled captures**. Choose an API provider, enter a vision model with structured output, add its API key and describe the photo you want. Select **Analyze a preview before each scheduled shot** and save. Sidedoor encrypts the API key on the Pi. A blank key field keeps the selected provider's saved credential. **Check saved API key** contacts that provider without sending a camera preview.
+
+With AI enabled, a preview or provider error fails the run before the shutter fires. Clear the checkbox and save to resume ordinary scheduled captures. The schedule stays in the timer override above. Starting the service manually requests advice and takes a real photo when the advice succeeds.
+
 ## Optional camera uploads over Wi-Fi
 
 The optional explicit FTPS receiver accepts the configured camera's IPv4 address and writes uploads to the gallery. It permits legacy TLS for older Sony firmware. Use it only on a trusted LAN. Reserve the Pi and camera addresses in DHCP.
@@ -108,7 +146,13 @@ Copy the Pi's public `~/.config/sony-pi-camera/transfer-ca.crt` to an SD card as
 ```mermaid
 flowchart LR
     browser["Browser"] <-->|"HTTPS 8766 or SSH tunnel to 8765"| api["Camera service"]
+    family["Invited viewers and camera admin"] <-->|"HTTPS tunnel or reverse proxy"| viewer["Sidedoor viewer on loopback 8770"]
+    viewer <-->|"Role-scoped loopback requests"| api
+    viewer --- state[("Camera access and encrypted AI settings")]
     timer["Optional daily systemd timer"] -->|"Authenticated local capture request"| api
+    timer <-->|"Optional preview and settings"| api
+    timer <-->|"Optional vision request through Sidedoor"| model["Configured AI provider"]
+    timer --- state
     api -->|"One USB request at a time"| gphoto["gPhoto2"]
     gphoto <-->|"USB PC Remote"| sony["Sony α7 III"]
     gphoto -->|"Captured originals"| photos[("Pi photo library")]
@@ -131,6 +175,7 @@ uv run --frozen pre-commit install --install-hooks
 uv run --frozen pre-commit run --all-files
 uv run --frozen python -m unittest discover -s tests -v
 node --check camera/camera.js
+(cd camera/sidedoor && npm ci && npm test)
 ```
 
 The dashboard uses Pillow for cropped JPEGs. Camera operations and thumbnails also need the system commands `gphoto2` and `exiftool`. The Pi installer runs services under the OS Python. For local receiver development, `uv sync --frozen --extra ftps` installs pyftpdlib and pyOpenSSL. Update dependencies in `pyproject.toml`, run `uv lock` and commit the updated lockfile.

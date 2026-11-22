@@ -1,0 +1,22 @@
+[Unit]
+Description=Sony Pi Camera browser viewer for %i
+Requires=sony-pi-camera@%i.service
+After=sony-pi-camera@%i.service
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/opt/pi-camera/sidedoor
+ExecStart=/usr/bin/env node /opt/pi-camera/sidedoor/web/server.mjs
+EnvironmentFile=/etc/sony-pi-viewer-%i.conf
+StateDirectory=sony-pi-camera-%i
+StateDirectoryMode=0700
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

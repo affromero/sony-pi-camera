@@ -1,0 +1,121 @@
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { createServer, request } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import test from 'node:test';
+import { createViewer, initializeAdmin } from '../camera/sidedoor/web/server.mjs';
+
+const origin = 'https://camera.example.test';
+const password = 'valid-admin-password';
+
+async function listen(server) {
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  return server.address().port;
+}
+
+function call(port, path, { method = 'GET', body, cookie, site = origin, host = 'camera.example.test' } = {}) {
+  return new Promise((resolve, reject) => {
+    const payload = body === undefined ? undefined : Buffer.from(JSON.stringify(body));
+    const headers = { Host: host };
+    if (cookie) headers.Cookie = cookie;
+    if (method === 'POST') Object.assign(headers, {
+      Origin: site, 'Content-Type': 'application/json', 'Content-Length': payload.length,
+    });
+    const outgoing = request({ host: '127.0.0.1', port, path, method, headers }, async (result) => {
+      const chunks = [];
+      for await (const chunk of result) chunks.push(chunk);
+      const bytes = Buffer.concat(chunks);
+      const data = result.headers['content-type']?.startsWith('application/json') ? JSON.parse(bytes) : bytes;
+      const sid = result.headers['set-cookie']?.[0]?.split(';')[0];
+      resolve({ status: result.statusCode, data, headers: result.headers, cookie: sid });
+    });
+    outgoing.on('error', reject);
+    outgoing.end(payload);
+  });
+}
+
+test('keeps viewer invitations read-only and admin AI credentials private', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'sony-camera-test-'));
+  let deleted = false;
+  let previewCalls = 0;
+  let iso = '100';
+  const upstream = createServer(async (req, res) => {
+    if (req.headers['x-camera-token'] !== 'camera-key') return res.writeHead(403).end();
+    if (req.url === '/api/preview') {
+      previewCalls++;
+      return res.writeHead(200, { 'Content-Type': 'image/jpeg' }).end('jpeg');
+    }
+    if (req.url === '/api/photos/nonempty%2Fa%20%25.raw') return res.end('original');
+    if (req.url === '/api/photos?details=1') return res.end(JSON.stringify(deleted ? [] : [{ name: 'nonempty/a %.raw' }]));
+    if (req.url === '/api/settings') return res.end(JSON.stringify({ iso }));
+    if (req.method !== 'POST' || req.headers.origin !== `http://127.0.0.1:${upstream.address().port}`)
+      return res.writeHead(404).end();
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const data = JSON.parse(Buffer.concat(chunks));
+    if (req.url === '/api/setting' && data.name === 'iso') iso = data.value;
+    else if (req.url === '/api/delete' && data.name === 'nonempty/a %.raw') deleted = true;
+    else return res.writeHead(404).end();
+    res.end(JSON.stringify({ ok: true }));
+  });
+  t.after(() => upstream.close());
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await initializeAdmin(directory, password);
+  const privatePort = await listen(upstream);
+  const server = await createViewer({ origin, directory, port: privatePort, cameraToken: 'camera-key' });
+  t.after(() => server.close());
+  const port = await listen(server);
+  const get = (path, cookie) => call(port, path, { cookie });
+  const post = (path, body, cookie, site) => call(port, path, { method: 'POST', body, cookie, site });
+
+  assert.equal((await get('/photos')).status, 401);
+  assert.equal((await call(port, '/', { host: 'wrong.example.test' })).status, 403);
+  assert.equal((await post('/access/login', { password }, undefined, 'https://other.example.test')).status, 403);
+  const owner = await post('/access/login', { password });
+  assert.equal(owner.status, 200);
+  assert.match(owner.headers['set-cookie'][0], /HttpOnly.*Secure/);
+  assert.equal((await get('/session', owner.cookie)).data.role, 'admin');
+  const invitation = await post('/access/issue-invitation', { uses: null }, owner.cookie);
+  assert.equal(invitation.status, 200);
+  const redeemed = await post('/access/redeem-invitation', { code: invitation.data.code });
+  assert.equal(redeemed.status, 200);
+  const guest = redeemed.cookie;
+  assert.equal((await post('/access/redeem-invitation', { code: invitation.data.code })).status, 401);
+  assert.equal((await get('/session', guest)).data.role, 'viewer');
+  assert.deepEqual((await get('/photos', guest)).data, [{ name: 'nonempty/a %.raw' }]);
+  const downloads = await get('/download/nonempty%2Fa%20%25.raw', guest);
+  assert.equal(downloads.data.toString(), 'original');
+  assert.match(downloads.headers['content-disposition'], /^attachment/);
+  assert.match(downloads.headers['cache-control'], /no-store/);
+  assert.equal((await get('/download/%2e%2e%2Ffile', guest)).status, 404);
+  assert.equal((await get('/settings', guest)).status, 403);
+  assert.equal((await post('/setting', { name: 'iso', value: '400' }, guest)).status, 403);
+  assert.equal((await post('/delete', { name: 'nonempty/a %.raw' }, guest)).status, 403);
+  assert.equal((await get('/ai', guest)).status, 403);
+  assert.equal((await post('/ai', {}, guest)).status, 403);
+  assert.equal((await post('/access/issue-invitation', {}, guest)).status, 403);
+  assert.equal((await get('/api/advice-input', owner.cookie)).status, 404);
+  assert.equal((await post('/access/configure-household', { password }, owner.cookie)).status, 404);
+  const previews = await Promise.all([get('/preview', guest), get('/preview', owner.cookie)]);
+  assert.ok(previews.every(({ status, data }) => status === 200 && data.toString() === 'jpeg'));
+  assert.equal(previewCalls, 1);
+
+  const configured = await post('/ai', {
+    enabled: true, provider: 'openai', model: 'vision-model', prompt: 'Lift shadows', apiKey: 'example-test-credential',
+  }, owner.cookie);
+  assert.equal(configured.status, 200);
+  assert.equal((await get('/ai', owner.cookie)).data.hasKey, true);
+  assert.ok(!JSON.stringify(configured.data).includes('example-test-credential'));
+  assert.ok(!(await readFile(join(directory, 'ai.json'), 'utf8')).includes('example-test-credential'));
+  assert.equal((await post('/setting', { name: 'iso', value: '400' }, owner.cookie)).status, 200);
+  assert.equal((await get('/settings', owner.cookie)).data.iso, '400');
+  assert.equal((await post('/delete', { name: 'nonempty/a %.raw' }, owner.cookie)).status, 200);
+  assert.deepEqual((await get('/photos', guest)).data, []);
+
+  const sessions = await get('/access/sessions', owner.cookie);
+  const activeViewer = sessions.data.sessions.find(({ admission }) => admission === 'invitation');
+  assert.ok(activeViewer);
+  assert.equal((await post('/access/revoke-session', { id: activeViewer.id }, owner.cookie)).status, 200);
+  assert.equal((await get('/photos', guest)).status, 401);
+});
