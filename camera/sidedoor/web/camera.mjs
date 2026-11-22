@@ -5,7 +5,7 @@ export function createCamera({ port, cameraToken, previewInterval = 2000 }) {
   const upstream = `http://127.0.0.1:${port}`;
   let frame;
   let pendingFrame;
-  let refreshAt = 0;
+  let refreshedAt = -Infinity;
   let downloads = 0;
 
   function request(path, signal, body) {
@@ -21,26 +21,33 @@ export function createCamera({ port, cameraToken, previewInterval = 2000 }) {
     });
   }
 
-  async function preview() {
-    if (pendingFrame) return pendingFrame;
-    if (Date.now() < refreshAt) return frame;
-    pendingFrame = (async () => {
-      try {
-        const result = await request('/api/preview', AbortSignal.timeout(20000));
-        if (!result.ok || result.headers.get('content-type') !== 'image/jpeg') {
-          await result.body?.cancel();
-          return null;
-        }
-        return Buffer.from(await result.arrayBuffer());
-      } catch {
-        return null;
-      }
-    })();
+  async function preview(nativeOnly = false) {
+    const interval = nativeOnly && frame?.native !== false ? 100 : previewInterval;
+    if (!pendingFrame && performance.now() - refreshedAt >= interval) {
+      pendingFrame = refresh();
+    }
+    const latest = pendingFrame ? await pendingFrame : frame;
+    return latest && (!nativeOnly || latest.native) ? latest.jpeg : null;
+  }
+
+  async function refresh() {
     try {
-      frame = await pendingFrame;
+      const result = await request('/api/preview', AbortSignal.timeout(20000));
+      if (!result.ok || result.headers.get('content-type') !== 'image/jpeg') {
+        await result.body?.cancel();
+        frame = null;
+      } else {
+        frame = {
+          jpeg: Buffer.from(await result.arrayBuffer()),
+          native: result.headers.get('x-preview-backend') === 'rust',
+        };
+      }
       return frame;
+    } catch {
+      frame = null;
+      return null;
     } finally {
-      refreshAt = Date.now() + previewInterval;
+      refreshedAt = performance.now();
       pendingFrame = undefined;
     }
   }

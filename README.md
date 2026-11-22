@@ -10,7 +10,10 @@ flowchart LR
     Admin --> Camera
     Timer --> Camera
     Timer -. Optional preview advice .-> AI[AI provider]
-    Camera --> Sony[USB camera and Pi gallery]
+    Camera --> Gallery[Pi gallery]
+    Camera --> Sony[USB camera]
+    Camera -. Optional Rust preview .-> Worker[libgphoto2 worker]
+    Worker --> Sony
 ```
 
 [Setup and operation](SETUP.md) · [Glossary](GLOSSARY.md) · [MIT license](LICENSE)

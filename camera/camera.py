@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Private camera interface. Access through an SSH tunnel only."""
 
+import atexit
 import base64
 import io
 import json
@@ -24,6 +25,11 @@ from urllib.parse import unquote, urlsplit
 
 from PIL import Image, ImageOps
 
+if __package__:
+    from camera.rust_preview import RustPreview
+else:
+    from rust_preview import RustPreview
+
 ROOT = Path(__file__).resolve().parent
 PHOTOS = (Path.home() / "camera-photos").resolve()
 TOKEN_FILE = Path.home() / ".config/sony-pi-camera/camera-token"
@@ -31,6 +37,7 @@ PORT = int(os.environ.get("PI_CAMERA_PORT", "8765"))
 LAN_PORT = 8766
 LOCK = threading.Lock()
 CONTROL = threading.Lock()
+RUST_PREVIEW = None
 SETTINGS = (
     "iso",
     "shutterspeed",
@@ -70,6 +77,8 @@ def camera_control() -> Iterator[None]:
 
 
 def command(*args, cwd=None, timeout=90):
+    if RUST_PREVIEW is not None:
+        RUST_PREVIEW.stop()
     result = subprocess.run(
         ["gphoto2", *args],
         cwd=cwd,
@@ -191,11 +200,41 @@ def viewport(output):
         for line in output.splitlines()
         if line.startswith("Current: ")
     ]
+    return viewport_from_raw(ratio, point)
+
+
+def viewport_from_raw(ratio, point):
     return {
         "ratio": max(1, ratio / 10),
         "x": (point >> 16) / 640,
         "y": (point & 65535) / 428,
     }
+
+
+def preview_frame(advice):
+    if RUST_PREVIEW is not None and not advice:
+        frame, ratio, point = RUST_PREVIEW.frame()
+        return frame, viewport_from_raw(ratio, point), None
+    with tempfile.TemporaryDirectory() as directory:
+        output = command(
+            "--capture-preview",
+            "--filename",
+            "preview.jpg",
+            "--get-config",
+            "d22f",
+            "--get-config",
+            "d230",
+            cwd=directory,
+            timeout=10 if advice else 90,
+        )
+        images = list(Path(directory).glob("*.jpg"))
+        if not images:
+            raise RuntimeError("Camera returned no preview")
+        state = viewport(output)
+        if advice and images[0].stat().st_size > 2 * 1024 * 1024:
+            raise RuntimeError("Camera preview is too large.")
+        settings = settings_snapshot(timeout=8) if advice else None
+        return images[0].read_bytes(), state, settings
 
 
 def magnifier_steps(action, count=1):
@@ -468,27 +507,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path == "/api/preview" or advice:
                 reservation = camera_control if advice else camera_read
-                with reservation(), tempfile.TemporaryDirectory() as directory:
-                    output = command(
-                        "--capture-preview",
-                        "--filename",
-                        "preview.jpg",
-                        "--get-config",
-                        "d22f",
-                        "--get-config",
-                        "d230",
-                        cwd=directory,
-                        timeout=10 if advice else 90,
-                    )
-                    images = list(Path(directory).glob("*.jpg"))
-                    if not images:
-                        raise RuntimeError("Camera returned no preview")
-                    state = viewport(output)
-                    if advice:
-                        if images[0].stat().st_size > 2 * 1024 * 1024:
-                            raise RuntimeError("Camera preview is too large.")
-                        settings = settings_snapshot(timeout=8)
-                    frame = images[0].read_bytes()
+                with reservation():
+                    frame, state, settings = preview_frame(advice)
                 if advice:
                     self.send(
                         {
@@ -502,6 +522,11 @@ class Handler(BaseHTTPRequestHandler):
                     frame,
                     "image/jpeg",
                     headers={
+                        **(
+                            {"X-Preview-Backend": "rust"}
+                            if RUST_PREVIEW is not None
+                            else {}
+                        ),
                         "X-Magnification": str(state["ratio"]),
                         "X-Magnifier-X": str(state["x"]),
                         "X-Magnifier-Y": str(state["y"]),
@@ -647,6 +672,9 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    if preview_path := os.getenv("PI_CAMERA_RUST_PREVIEW"):
+        RUST_PREVIEW = RustPreview(Path(preview_path))
+        atexit.register(RUST_PREVIEW.stop)
     PHOTOS.mkdir(mode=0o700, parents=True, exist_ok=True)
     TOKEN_FILE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     if not TOKEN_FILE.exists():

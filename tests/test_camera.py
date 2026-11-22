@@ -1,7 +1,6 @@
 """Exercise camera access and photo management through HTTP."""
 
 import base64
-import importlib.util
 import io
 import json
 import os
@@ -19,15 +18,14 @@ from unittest import mock
 
 from PIL import Image
 
+from camera import camera
+
 SERVER = Path(__file__).resolve().parents[1] / "camera/camera.py"
 SCHEDULE = SERVER.with_name("scheduled_capture.py")
 
 
 class ApertureTest(unittest.TestCase):
     def test_region_uses_native_levels_and_reports_measured_center(self):
-        spec = importlib.util.spec_from_file_location("camera", SERVER)
-        camera = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(camera)
         ratio, x, y = 0, 320, 214
 
         def usb(*args):
@@ -66,9 +64,6 @@ class ApertureTest(unittest.TestCase):
                 camera.magnify_region(0.5, 0.5, float("nan"), 0.2)
 
     def test_focus_reports_camera_selected_point_and_lock(self):
-        spec = importlib.util.spec_from_file_location("camera", SERVER)
-        camera = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(camera)
 
         def device(*args):
             if args[0] == "--get-config":
@@ -89,9 +84,6 @@ class ApertureTest(unittest.TestCase):
                 camera.focus_at(1.1, 0)
 
     def test_still_exposure_choices_respect_body_and_mode(self):
-        spec = importlib.util.spec_from_file_location("camera", SERVER)
-        camera = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(camera)
         iso = ["Auto ISO", "25", "50", "64", "204800", "409600"]
         speeds = ["30", "32/10", "1/8000", "1/32000", "Bulb"]
         for name, choices, expected in [
@@ -112,9 +104,6 @@ class ApertureTest(unittest.TestCase):
                     )
 
     def test_aperture_choices_match_the_installed_lens(self):
-        spec = importlib.util.spec_from_file_location("camera", SERVER)
-        camera = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(camera)
         output = (
             "Current: f/1.2\nReadonly: 0\n"
             "Choice: 0 f/1\nChoice: 1 f/1.2\n"
@@ -126,9 +115,6 @@ class ApertureTest(unittest.TestCase):
             )
 
     def test_settings_snapshot_preserves_mode_limits_and_battery(self):
-        spec = importlib.util.spec_from_file_location("camera", SERVER)
-        camera = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(camera)
         blocks = {
             "expprogram": "Current: A",
             "iso": "Current: 64\nChoice: 0 25\nChoice: 1 64",

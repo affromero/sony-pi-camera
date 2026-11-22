@@ -37,7 +37,7 @@ function call(port, path, { method = 'GET', body, cookie, site = origin, host = 
   });
 }
 
-test('keeps viewer invitations read-only and admin AI credentials private', async (t) => {
+test('keeps viewer invitations read-only and admin AI credentials private', { timeout: 8000 }, async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'sony-camera-test-'));
   let deleted = false;
   let previewCalls = 0;
@@ -46,7 +46,7 @@ test('keeps viewer invitations read-only and admin AI credentials private', asyn
     if (req.headers['x-camera-token'] !== 'camera-key') return res.writeHead(403).end();
     if (req.url === '/api/preview') {
       previewCalls++;
-      return res.writeHead(200, { 'Content-Type': 'image/jpeg' }).end('jpeg');
+      return res.writeHead(200, { 'Content-Type': 'image/jpeg', 'X-Preview-Backend': 'rust' }).end('jpeg');
     }
     if (req.url === '/api/photos/nonempty%2Fa%20%25.raw') return res.end('original');
     if (req.url === '/api/photos?details=1') return res.end(JSON.stringify(deleted ? [] : [{ name: 'nonempty/a %.raw' }]));
@@ -66,7 +66,7 @@ test('keeps viewer invitations read-only and admin AI credentials private', asyn
   await initializeAdmin(directory, password);
   const privatePort = await listen(upstream);
   const camera = createCamera({ port: privatePort, cameraToken: 'camera-key' });
-  const server = await createViewer({ origin, directory, camera });
+  const server = await createViewer({ origin, directory, camera, privateStream: true });
   const broker = await createViewer({ origin, directory, camera, mode: 'guest' });
   const socket = join(directory, 'guest.sock');
   await new Promise((resolve) => broker.listen(socket, resolve));
@@ -82,6 +82,7 @@ test('keeps viewer invitations read-only and admin AI credentials private', asyn
   const guestPost = (path, body, cookie) => call(relayPort, path, { method: 'POST', body, cookie });
 
   assert.equal((await get('/photos')).status, 401);
+  assert.equal((await get('/stream')).status, 401);
   assert.equal((await call(port, '/', { host: 'wrong.example.test' })).status, 403);
   assert.equal((await post('/access/login', { password }, undefined, 'https://other.example.test')).status, 403);
   const owner = await post('/access/login', { password });
@@ -95,6 +96,7 @@ test('keeps viewer invitations read-only and admin AI credentials private', asyn
   const guest = redeemed.cookie;
   assert.equal((await guestPost('/access/redeem-invitation', { code: invitation.data.code })).status, 401);
   assert.equal((await guestGet('/session', guest)).data.role, 'viewer');
+  assert.equal((await guestGet('/stream', guest)).status, 404);
   assert.equal((await guestGet('/session', owner.cookie)).status, 403);
   assert.equal((await guestPost('/access/logout', {}, owner.cookie)).status, 403);
   assert.equal((await guestPost('/access/login', { password })).status, 404);
@@ -136,4 +138,26 @@ test('keeps viewer invitations read-only and admin AI credentials private', asyn
   assert.ok(activeViewer);
   assert.equal((await post('/access/revoke-session', { id: activeViewer.id }, owner.cookie)).status, 200);
   assert.equal((await guestGet('/photos', guest)).status, 401);
+
+  let onDisconnect;
+  const disconnected = new Promise((resolve) => { onDisconnect = resolve; });
+  const received = await new Promise((resolve, reject) => {
+    const outgoing = request({ host: '127.0.0.1', port, path: '/stream',
+      headers: { Host: 'camera.example.test', Cookie: owner.cookie } }, (reply) => {
+      reply.on('error', () => {});
+      reply.once('close', onDisconnect);
+      let body = '';
+      reply.on('data', (chunk) => {
+        body += chunk;
+        if (body.split('jpeg\r\n').length >= 3) resolve({ type: reply.headers['content-type'], body });
+      });
+    });
+    outgoing.on('error', reject);
+    t.after(() => outgoing.destroy());
+    outgoing.end();
+  });
+  assert.match(received.type, /^multipart\/x-mixed-replace/);
+  assert.match(received.body, /--sony-preview\r\nContent-Type: image\/jpeg/);
+  assert.equal((await post('/access/logout', {}, owner.cookie)).status, 200);
+  await disconnected;
 });
