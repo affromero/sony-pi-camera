@@ -1,5 +1,8 @@
 # Sony Pi Camera
 
+[![Checks on main](https://github.com/affromero/sony-pi-camera/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/affromero/sony-pi-camera/actions/workflows/checks.yml)
+[![Tested camera: Sony α7 III](https://img.shields.io/badge/tested_camera-Sony_%CE%B17_III-444)](#connect-the-camera)
+
 Control a USB-connected Sony α7 III from a browser on your local network. A Raspberry Pi serves the live preview, camera controls and photo gallery. This setup has been tested with an α7 III running firmware 4.04, a Sigma 35mm F1.2 DG DN Art and a Raspberry Pi Zero 2 W.
 
 ## Connect the camera
@@ -58,6 +61,34 @@ sudo systemctl enable --now "pi-camera-transfer@$USER"
 
 Copy the Pi's public `~/.config/pi-field-notes/transfer-ca.crt` to an SD card as `cacert.pem`. Use slot 1 and select **Network → Import Root Certificate** on the Sony. For the FTP destination, enter the Pi's IPv4 address, port 2121, user `camera`, and the password stored on the Pi in `~/.config/pi-field-notes/transfer-password`. Enable Secure Protocol, passive transfer and certificate verification. Allow inbound TCP 2121 and 30000 through 30010 from the camera if a LAN firewall is active. Concurrent FTP and USB remote operation depends on camera configuration.
 
+## Architecture
+
+```mermaid
+flowchart LR
+    browser["Browser"] <-->|"HTTPS 8766 or SSH tunnel to 8765"| api["Camera service"]
+    api -->|"One USB request at a time"| gphoto["gPhoto2"]
+    gphoto <-->|"USB PC Remote"| sony["Sony α7 III"]
+    gphoto -->|"Captured originals"| photos[("Pi photo library")]
+    sony -->|"Optional Wi-Fi FTPS upload"| transfer["Transfer service"]
+    transfer --> photos
+    photos -->|"Originals"| api
+    photos --> exif["ExifTool"]
+    exif -->|"Embedded thumbnails"| api
+```
+
+The Pi can serve its library while the camera is disconnected. Capturing and live preview require the USB connection. See the [camera glossary](glossary.md) for the names used in the interface.
+
 ## Development
 
-Run `python3 -m unittest discover -s tests` and `node --check camera/camera.js` from the repository root. Camera commands run through gPhoto2. The archived Windows utility SonyAlphaUSB provided a reference for the α7 III focus-point coordinates. [gPhoto2](https://github.com/gphoto/gphoto2) · [SonyAlphaUSB](https://github.com/pixeltris/SonyAlphaUSB)
+Use Python 3.11 or newer, Node.js, pre-commit and ShellCheck. On Debian or Raspberry Pi OS, install them with `sudo apt install python3 nodejs pre-commit shellcheck`. On macOS, use `brew install python node pre-commit shellcheck`. Install the hooks and run the checks from the root of your checkout.
+
+```sh
+pre-commit install --install-hooks
+pre-commit run --all-files
+python3 -m unittest discover -s tests -v
+node --check camera/camera.js
+```
+
+The tests start the HTTP service on loopback, use a temporary photo library and simulate the USB device. GitHub Actions runs the same checks on pull requests and pushes to `main`. Test changes to capture, focus or magnification on a connected body before reporting hardware support.
+
+The archived Windows utility SonyAlphaUSB provided a reference for the α7 III focus-point coordinates. [gPhoto2](https://github.com/gphoto/gphoto2) · [SonyAlphaUSB](https://github.com/pixeltris/SonyAlphaUSB)
