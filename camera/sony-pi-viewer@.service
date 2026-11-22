@@ -6,11 +6,15 @@ After=sony-pi-camera@%i.service
 [Service]
 Type=simple
 User=%i
+Group=sony-camera-viewer
+UMask=0077
 WorkingDirectory=/opt/pi-camera/sidedoor
 ExecStart=/usr/bin/env node /opt/pi-camera/sidedoor/web/server.mjs
 EnvironmentFile=/etc/sony-pi-viewer-%i.conf
 StateDirectory=sony-pi-camera-%i
 StateDirectoryMode=0700
+RuntimeDirectory=sony-camera-%i
+RuntimeDirectoryMode=0750
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=read-only

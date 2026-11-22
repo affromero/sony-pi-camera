@@ -30,7 +30,9 @@ function locked() {
   photos.replaceChildren();
   camera.hidden = lock.hidden = true;
   invite.hidden = !inviteCode;
-  unlock.hidden = Boolean(inviteCode);
+  unlock.hidden = Boolean(inviteCode) || document.body.hasAttribute('data-guest');
+  if (unlock.hidden && !inviteCode && document.body.hasAttribute('data-guest'))
+    status.textContent = 'Open the invitation link from the camera owner.';
   admin = false;
   showAdmin(false);
 }

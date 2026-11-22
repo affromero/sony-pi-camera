@@ -16,13 +16,14 @@ function selection(value) {
   const { enabled, provider, model, prompt } = value;
   if (provider && !descriptors().some(({ id }) => id === provider)) return null;
   if (enabled && (!provider || !model.trim() || !prompt.trim())) return null;
-  return { enabled, provider, model: model.trim(), prompt: prompt.trim() };
+  if (value.requireAdvice !== undefined && typeof value.requireAdvice !== 'boolean') return null;
+  return { enabled, requireAdvice: value.requireAdvice ?? false, provider, model: model.trim(), prompt: prompt.trim() };
 }
 
 export function createAiConfig(directory) {
   const store = new FileStateStore({
     path: join(directory, 'ai.json'),
-    initial: () => ({ enabled: false, provider: '', model: '', prompt: '', credentials: initialCredentialState() }),
+    initial: () => ({ enabled: false, requireAdvice: false, provider: '', model: '', prompt: '', credentials: initialCredentialState() }),
     parse(value) {
       const config = selection(value);
       if (!config) throw new Error('Invalid saved AI settings');
@@ -36,8 +37,8 @@ export function createAiConfig(directory) {
       create: write && !state.credentials.providers.some(({ encrypted }) => encrypted),
     }),
   });
-  function publicConfig({ enabled, provider, model, prompt, credentials }) {
-    return { enabled, provider, model, prompt, providers: descriptors().map(({ id, label }) => ({ id, label })),
+  function publicConfig({ enabled, requireAdvice, provider, model, prompt, credentials }) {
+    return { enabled, requireAdvice, provider, model, prompt, providers: descriptors().map(({ id, label }) => ({ id, label })),
       hasKey: credentials.providers.some((item) => item.provider === provider && item.encrypted) };
   }
   function registryFor(state) {

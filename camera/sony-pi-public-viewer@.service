@@ -1,0 +1,23 @@
+[Unit]
+Description=Public Sony camera viewer relay for %i
+Requires=sony-pi-viewer@%i.service
+After=sony-pi-viewer@%i.service
+
+[Service]
+DynamicUser=yes
+Group=sony-camera-viewer
+ExecStart=/usr/bin/env node /opt/pi-camera/sidedoor/web/relay.mjs /run/sony-camera-%i/guest.sock
+RuntimeDirectory=sony-camera-public-%i
+RuntimeDirectoryMode=0755
+UMask=0077
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+RestrictAddressFamilies=AF_UNIX
+IPAddressDeny=any
+InaccessiblePaths=-/var/lib/sony-pi-camera-%i
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

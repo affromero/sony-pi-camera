@@ -294,6 +294,11 @@ class CameraTest(unittest.TestCase):
             self.assertTrue(shutter.exists())
 
             failure.touch()
+            optional = run_timer()
+            self.assertEqual(optional.returncode, 0, optional.stderr)
+            self.assertIn("provider request failed", optional.stderr)
+            self.assertTrue(shutter.exists())
+            config.write_text('{"enabled": true, "requireAdvice": true}')
             failed = run_timer()
             self.assertNotEqual(failed.returncode, 0)
             self.assertIn("provider request failed", failed.stderr)

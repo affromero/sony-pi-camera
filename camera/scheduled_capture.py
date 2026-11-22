@@ -98,7 +98,29 @@ def run(config_dir: Path, port: int, state_dir: Path | None) -> list[str]:
             if type(enabled) is not bool:
                 raise RuntimeError("Saved AI configuration is invalid")
             if enabled:
-                log_advice(port, token, state_dir)
+                required = settings.get("requireAdvice", False)
+                if type(required) is not bool:
+                    raise RuntimeError("Saved AI policy is invalid")
+                try:
+                    log_advice(port, token, state_dir)
+                except (
+                    OSError,
+                    ValueError,
+                    RuntimeError,
+                    subprocess.TimeoutExpired,
+                ) as exc:
+                    message = (
+                        "AI advisor timed out"
+                        if isinstance(exc, subprocess.TimeoutExpired)
+                        else str(exc)
+                    )
+                    if required:
+                        raise RuntimeError(message) from exc
+                    print(
+                        f"AI advice unavailable: {message}. Capturing.",
+                        file=sys.stderr,
+                        flush=True,
+                    )
     return capture(port, token)
 
 
