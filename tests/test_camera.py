@@ -145,7 +145,7 @@ class CameraTest(unittest.TestCase):
         fake_camera.chmod(0o700)
         env["PATH"] = str(cls.home) + os.pathsep + env["PATH"]
         cls.process = subprocess.Popen([sys.executable, str(SERVER)], env=env)
-        token_file = cls.home / ".config/pi-field-notes/camera-token"
+        token_file = cls.home / ".config/sony-pi-camera/camera-token"
         for _ in range(100):
             if token_file.exists() and token_file.read_text():
                 cls.token = token_file.read_text()

@@ -2,7 +2,7 @@
 set -eu
 
 pi_host=${1:?Usage: open-camera.sh user@hostname.local}
-camera_token=$(ssh -o BatchMode=yes "$pi_host" 'cat ~/.config/pi-field-notes/camera-token')
+camera_token=$(ssh -o BatchMode=yes "$pi_host" 'cat ~/.config/sony-pi-camera/camera-token')
 if [ -z "$camera_token" ]; then
   printf 'Camera token is unavailable.\n' >&2
   exit 1

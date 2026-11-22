@@ -18,7 +18,7 @@ from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parent
 PHOTOS = (Path.home() / "camera-photos").resolve()
-TOKEN_FILE = Path.home() / ".config/pi-field-notes/camera-token"
+TOKEN_FILE = Path.home() / ".config/sony-pi-camera/camera-token"
 PORT = int(os.environ.get("PI_CAMERA_PORT", "8765"))
 LAN_PORT = 8766
 LOCK = threading.Lock()

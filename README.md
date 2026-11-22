@@ -7,7 +7,7 @@ Control a USB-connected Sony α7 III from a browser on your local network. A Ras
 
 ## Why this exists
 
-I wanted to leave a Sony α7 III at a window and check the shot from another room. A Pi beside the camera keeps the USB connection open. From a phone or laptop on the same Wi-Fi, I can inspect focus, take a picture and open the original file without moving the camera or taking out its card.
+A camera mounted out of reach can be awkward to operate from its rear screen. A Pi beside the camera keeps the USB connection open so a photographer on the same Wi-Fi can check focus, trigger the shutter and review original files from a browser.
 
 ## Connect the camera
 
@@ -26,8 +26,8 @@ sudo sh camera/install.sh
 The installer starts a systemd service under your account. To view its status or troubleshoot a busy USB device, use these commands. Close other software holding the camera before restarting the service.
 
 ```sh
-systemctl status "pi-field-notes-camera@$USER"
-journalctl -u "pi-field-notes-camera@$USER" -n 30
+systemctl status "sony-pi-camera@$USER"
+journalctl -u "sony-pi-camera@$USER" -n 30
 ```
 
 ## Open the dashboard
@@ -37,10 +37,10 @@ From a Mac with this checkout and SSH key access to the Pi, run `sh camera/open-
 On a phone or another device on the same LAN, use `https://hostname.local:8766/` with your Pi's actual hostname. Retrieve the public certificate and access key over SSH. Compare the downloaded certificate's SHA-256 fingerprint with the Pi's output before trusting it on your device. Enter the access key on the dashboard. Keep the service on your local network.
 
 ```sh
-ssh user@hostname.local 'openssl x509 -in ~/.config/pi-field-notes/camera.crt -noout -fingerprint -sha256'
-scp user@hostname.local:.config/pi-field-notes/camera.crt ./camera.crt
+ssh user@hostname.local 'openssl x509 -in ~/.config/sony-pi-camera/camera.crt -noout -fingerprint -sha256'
+scp user@hostname.local:.config/sony-pi-camera/camera.crt ./camera.crt
 openssl x509 -in camera.crt -noout -fingerprint -sha256
-ssh user@hostname.local 'cat ~/.config/pi-field-notes/camera-token'
+ssh user@hostname.local 'cat ~/.config/sony-pi-camera/camera-token'
 ```
 
 ## Shooting and reviewing photos
@@ -59,11 +59,11 @@ Install the receiver dependencies and replace `CAMERA_IPV4` below with the camer
 
 ```sh
 sudo apt install python3-pyftpdlib python3-openssl
-printf '%s\n' CAMERA_IPV4 > ~/.config/pi-field-notes/transfer-camera-ip
+printf '%s\n' CAMERA_IPV4 > ~/.config/sony-pi-camera/transfer-camera-ip
 sudo systemctl enable --now "pi-camera-transfer@$USER"
 ```
 
-Copy the Pi's public `~/.config/pi-field-notes/transfer-ca.crt` to an SD card as `cacert.pem`. Use slot 1 and select **Network → Import Root Certificate** on the Sony. For the FTP destination, enter the Pi's IPv4 address, port 2121, user `camera`, and the password stored on the Pi in `~/.config/pi-field-notes/transfer-password`. Enable Secure Protocol, passive transfer and certificate verification. Allow inbound TCP 2121 and 30000 through 30010 from the camera if a LAN firewall is active. Concurrent FTP and USB remote operation depends on camera configuration.
+Copy the Pi's public `~/.config/sony-pi-camera/transfer-ca.crt` to an SD card as `cacert.pem`. Use slot 1 and select **Network → Import Root Certificate** on the Sony. For the FTP destination, enter the Pi's IPv4 address, port 2121, user `camera`, and the password stored on the Pi in `~/.config/sony-pi-camera/transfer-password`. Enable Secure Protocol, passive transfer and certificate verification. Allow inbound TCP 2121 and 30000 through 30010 from the camera if a LAN firewall is active. Concurrent FTP and USB remote operation depends on camera configuration.
 
 ## Architecture
 

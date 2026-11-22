@@ -10,7 +10,7 @@ from pyftpdlib.authorizers import DummyAuthorizer
 from pyftpdlib.handlers import TLS_FTPHandler
 from pyftpdlib.servers import FTPServer
 
-CONFIG = Path.home() / ".config/pi-field-notes"
+CONFIG = Path.home() / ".config/sony-pi-camera"
 PHOTOS = Path.home() / "camera-photos"
 
 

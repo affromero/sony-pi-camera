@@ -7,8 +7,16 @@ if [ "$(id -u)" -ne 0 ] || [ -z "${SUDO_USER:-}" ]; then
 fi
 project_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 camera_home=$(getent passwd "$SUDO_USER" | cut -d: -f6)
-config_dir="$camera_home/.config/pi-field-notes"
+config_dir="$camera_home/.config/sony-pi-camera"
 install -d -m 700 -o "$SUDO_USER" "$config_dir"
+# Keep existing camera credentials when upgrading from the original Pi dashboard.
+old_config="$camera_home/.config/pi-field-notes"
+for file in camera-token camera.crt camera.key transfer-ca.crt transfer-ca.key \
+  transfer.crt transfer.key transfer-password transfer-camera-ip; do
+  if [ -f "$old_config/$file" ] && [ ! -e "$config_dir/$file" ]; then
+    install -m 600 -o "$SUDO_USER" "$old_config/$file" "$config_dir/$file"
+  fi
+done
 if [ ! -e "$config_dir/camera.crt" ] && [ ! -e "$config_dir/camera.key" ]; then
   camera_name="$(hostname).local"
   umask 077
@@ -67,8 +75,12 @@ install -d -m 755 /opt/pi-camera
 install -m 644 "$project_dir/camera.py" "$project_dir/camera.html" \
   "$project_dir/camera.js" "$project_dir/camera.css" \
   "$project_dir/transfer.py" /opt/pi-camera/
-install -m 644 "$project_dir/pi-field-notes-camera@.service" /etc/systemd/system/
+install -m 644 "$project_dir/sony-pi-camera@.service" /etc/systemd/system/
 install -m 644 "$project_dir/pi-camera-transfer@.service" /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable "pi-field-notes-camera@$SUDO_USER.service"
-systemctl restart "pi-field-notes-camera@$SUDO_USER.service"
+if [ -f /etc/systemd/system/pi-field-notes-camera@.service ]; then
+  systemctl disable --now "pi-field-notes-camera@$SUDO_USER.service"
+fi
+systemctl enable "sony-pi-camera@$SUDO_USER.service"
+systemctl restart "sony-pi-camera@$SUDO_USER.service"
+systemctl try-restart "pi-camera-transfer@$SUDO_USER.service"
