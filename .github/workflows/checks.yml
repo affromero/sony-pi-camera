@@ -31,6 +31,9 @@ jobs:
           uv sync --frozen --extra ftps
       - name: Run repository hooks
         run: uv run --frozen --extra ftps pre-commit run --all-files --show-diff-on-failure
+      - name: Audit locked dependencies
+        if: matrix.python == '3.11'
+        run: uv audit --locked
       - name: Check dashboard JavaScript
         run: node --check camera/camera.js
       - name: Run camera service tests
