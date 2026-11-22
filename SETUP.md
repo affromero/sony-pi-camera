@@ -64,6 +64,8 @@ The optional worker holds one libgphoto2 session for preview frames. Before
 another USB command runs, the camera service stops the worker and waits for
 it to exit. The worker also releases USB after five seconds without a preview
 request. Enable it after checking your camera in PC Remote mode.
+The installer defaults to the CLI preview until the Rust worker has been
+verified with the α7 III's settings and still-capture workflow.
 
 On the Pi, install Rust 1.85 or later, Cargo, and `libgphoto2-dev`. From the
 checkout, build and install the worker after running the camera installer.
@@ -91,10 +93,23 @@ For a continuous preview on the private admin page, add
 Disable response buffering on the private proxy. Invited viewers retain
 the existing snapshot refresh interval.
 
-For a direct hardware measurement, stop the camera service and any other
-application using the Sony, then run `/opt/pi-camera/sony-pi-preview --probe 60`.
-It prints native JPEG dimensions, per-frame latency, and whether adjacent
-frames have identical bytes. Restart the camera service when finished.
+### Compare USB preview backends
+
+With the camera service and other camera apps stopped, run from the checkout:
+
+```sh
+uv run --frozen python benchmark_preview.py --worker /opt/pi-camera/sony-pi-preview --frames 60
+```
+
+Both paths fetch a native JPEG and read its viewport. The JSON reports first
+frame and subsequent latencies, native dimensions, wall-clock frame rate, and
+byte-identical neighbors alongside the installed gPhoto2 versions. It then
+measures a CLI viewport read after Rust releases USB, followed by the first
+Rust frame after reopening. Use a moving subject to expose repeated images.
+This comparison leaves the shutter untouched.
+
+Before replacing the CLI default, also verify repeated preview → still
+capture → preview cycles and USB reconnect on the actual camera.
 
 ## Shooting and reviewing photos
 

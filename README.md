@@ -16,4 +16,4 @@ flowchart LR
     Worker --> Sony
 ```
 
-[Setup and operation](SETUP.md) · [Glossary](GLOSSARY.md) · [MIT license](LICENSE)
+[Setup and operation](SETUP.md) · [Rust preview and USB benchmarks](SETUP.md#experimental-rust-usb-preview) · [Glossary](GLOSSARY.md) · [MIT license](LICENSE)
