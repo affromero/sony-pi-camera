@@ -1,0 +1,17 @@
+[Unit]
+Description=Sony camera encrypted photo transfer for %i
+After=network.target
+
+[Service]
+User=%i
+WorkingDirectory=/opt/pi-camera
+ExecStart=/usr/bin/python3 /opt/pi-camera/transfer.py
+Restart=on-failure
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/home/%i
+PrivateTmp=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

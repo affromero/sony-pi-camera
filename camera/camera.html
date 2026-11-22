@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sony Pi Camera</title><link rel="stylesheet" href="/camera.css"><script defer src="/camera.js"></script></head>
+<body><header><div>Sony Pi Camera</div>
+<div id="battery" aria-label="Camera battery" role="group">
+<svg viewBox="0 0 33 16" width="33" height="16" aria-hidden="true">
+<rect x="1" y="1" width="27" height="14" rx="4" fill="none" stroke="currentColor"/>
+<rect x="3" y="3" width="0" height="10" rx="2" id="battery-fill"/>
+<path d="M30 5q4 3 0 6z" fill="currentColor"/></svg>
+<div><strong id="battery-level">Unavailable</strong><small id="battery-state"></small></div></div></header>
+<div id="login" class="login" hidden><form id="login-form"><h1>Camera access</h1><p>Enter the camera access key for this Pi.</p><label>Access key <input id="access-key" type="password" required autocomplete="off"></label><button type="submit">Open camera</button><p id="login-error" role="alert"></p></form></div>
+<main><div class="heading"><div><p>SONY α7 III</p><h1>Camera</h1></div><span id="status" role="status">Connecting…</span></div>
+<div class="workspace"><section class="viewer"><div class="preview"><img id="preview" alt="Live camera preview"><button id="focus-target" aria-label="Focus on live preview. Press Enter to focus at the center." title="Click or tap to focus" hidden></button><span id="focus-marker" aria-hidden="true" hidden></span><p id="preview-message">Connecting to camera…</p></div><div class="toolbar"><span id="preview-status" role="status">Live preview</span><button id="capture" class="shutter" aria-label="Take photo" title="Take photo"><span></span></button><span id="capture-status"></span></div></section>
+<aside><h2>Focus magnifier</h2>
+<fieldset id="magnifier"><legend>Preview <output id="mag-level">1×</output></legend>
+<button data-mag="">Magnify</button><button data-mag="exit">Full frame</button>
+<div id="mag-pan" hidden><button data-mag="left" aria-label="Pan left">←</button><button data-mag="up" aria-label="Pan up">↑</button><button data-mag="down" aria-label="Pan down">↓</button><button data-mag="right" aria-label="Pan right">→</button></div></fieldset>
+<h2>Camera settings</h2><p class="hint" id="mode">Reading shooting mode…</p><p class="hint">Aperture range: Sigma 35mm F1.2 DG DN Art. Update this configuration if the lens changes.</p><div id="settings"></div></aside></div>
+<section class="library"><h2>Photos on the Pi</h2>
+<div class="gallery-filters">
+<label>Saved from <input type="date" id="photo-from"></label>
+<label>Through <input type="date" id="photo-through"></label>
+<label>Sort by <select id="photo-sort"><option value="new">Newest first</option><option value="old">Oldest first</option></select></label>
+</div><div id="photos" class="photos"></div><p id="photos-message" role="status"></p></section></main>
+<dialog id="photo-dialog"><div class="modal"><div class="modal-bar"><span id="modal-name"></span><div><button id="modal-zoom" disabled>100%</button><button id="modal-download">Download</button><button id="modal-delete">Delete</button><button id="modal-close" aria-label="Close">✕</button></div></div>
+<div class="modal-image"><img id="modal-photo" alt=""><div id="photo-loading"><strong id="load-percent"></strong><progress id="load-progress" max="100" aria-label="Original photo download"></progress><small id="load-bytes"></small></div><p id="modal-status" role="status" hidden></p></div></div></dialog>
+</body></html>

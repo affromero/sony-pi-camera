@@ -1,0 +1,46 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix, lf]
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-added-large-files
+        args: [--maxkb=2000]
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.21
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+  - repo: local
+    hooks:
+      - id: shellcheck
+        name: ShellCheck
+        entry: shellcheck
+        language: system
+        types: [shell]
+      - id: check-file-line-count
+        name: Check Python file length
+        entry: scripts/hooks/check_file_line_count.sh
+        language: script
+        types: [python]
+      - id: check-directory-file-count
+        name: Check directory file count
+        entry: scripts/hooks/check_directory_file_count.sh
+        args: [--include-regex, '[.](py|sh)$']
+        language: script
+        pass_filenames: false
+        always_run: true
+      - id: check-tests-under-tests
+        name: Check test locations
+        entry: scripts/hooks/check_tests_under_tests.sh
+        language: script
+        pass_filenames: false
+        always_run: true

@@ -1,0 +1,18 @@
+[Unit]
+Description=Pi Field Notes private camera interface for %i
+After=network.target
+
+[Service]
+User=%i
+WorkingDirectory=/opt/pi-camera
+ExecStart=/usr/bin/python3 /opt/pi-camera/camera.py
+Environment=PI_CAMERA_REQUIRE_TLS=1
+Restart=on-failure
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/home/%i
+PrivateTmp=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+
+[Install]
+WantedBy=multi-user.target
