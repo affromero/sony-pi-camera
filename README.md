@@ -32,7 +32,16 @@ journalctl -u "sony-pi-camera@$USER" -n 30
 
 ## Open the dashboard
 
-From a Mac with this checkout and SSH key access to the Pi, run `sh camera/open-camera.sh user@hostname.local`. Substitute your Pi's SSH address. The script opens the authenticated page through a local SSH tunnel.
+**On the Mac**, use Terminal to clone a second copy of the project. Replace `user@hostname.local` with the Pi account and hostname you configured. The first SSH command should print the Pi's hostname using your SSH key.
+
+```sh
+git clone https://github.com/affromero/sony-pi-camera.git
+cd sony-pi-camera
+ssh -o BatchMode=yes user@hostname.local hostname
+sh camera/open-camera.sh user@hostname.local
+```
+
+The helper opens the authenticated dashboard in your browser. With the camera on and connected in PC Remote mode, look for **Connected** and a live image. You can reopen `http://localhost:8765/` in the same browser tab while the tunnel is running.
 
 On a phone or another device on the same LAN, use `https://hostname.local:8766/` with your Pi's actual hostname. Retrieve the public certificate and access key over SSH. Compare the downloaded certificate's SHA-256 fingerprint with the Pi's output before trusting it on your device. Enter the access key on the dashboard. Keep the service on your local network.
 
@@ -42,6 +51,8 @@ scp user@hostname.local:.config/sony-pi-camera/camera.crt ./camera.crt
 openssl x509 -in camera.crt -noout -fingerprint -sha256
 ssh user@hostname.local 'cat ~/.config/sony-pi-camera/camera-token'
 ```
+
+On iPhone or iPad, transfer the verified public certificate to the device and install its profile. In **Settings → General → About → Certificate Trust Settings**, enable trust for that certificate, then open the Pi's HTTPS address in Safari. [Apple’s certificate trust instructions](https://support.apple.com/en-us/102390)
 
 ## Shooting and reviewing photos
 
@@ -82,7 +93,7 @@ flowchart LR
     exif -->|"Embedded thumbnails"| api
 ```
 
-The Pi can serve its library while the camera is disconnected. Capturing and live preview require the USB connection. See the [camera glossary](glossary.md) for the names used in the interface.
+The Pi can serve its library while the camera is disconnected. Capturing and live preview require the USB connection. See the [camera glossary](GLOSSARY.md) for the names used in the interface.
 
 ## Development
 
@@ -101,3 +112,7 @@ The dashboard uses Pillow for cropped JPEGs. Camera operations and thumbnails al
 The tests start the HTTP service on loopback, use a temporary photo library and simulate the USB device. CI checks the lockfile, imports the optional FTPS receiver and runs the tests on Python 3.11 and 3.13. Test changes to capture, focus or magnification on a connected body before reporting hardware support.
 
 The archived Windows utility SonyAlphaUSB provided a reference for the α7 III focus-point coordinates. [gPhoto2](https://github.com/gphoto/gphoto2) · [SonyAlphaUSB](https://github.com/pixeltris/SonyAlphaUSB)
+
+## License
+
+[MIT License](LICENSE) © 2026 Andrés Romero.
