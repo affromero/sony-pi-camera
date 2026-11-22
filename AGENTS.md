@@ -1,5 +1,8 @@
 # Working on Sony Pi Camera
 
+Keep the README brief. Use a diagram for the access and capture paths, and
+put installation and troubleshooting commands in `SETUP.md`.
+
 Read the architecture and hardware notes in [README.md](README.md). The tested configuration is a Sony α7 III with a Sigma 35mm F1.2 DG DN Art. Record the body, firmware, lens and shooting mode when reporting camera behavior.
 
 - `camera/camera.py` serves the dashboard and serializes USB operations with a process-wide lock. Route camera commands through its gPhoto2 helper. Check the camera's readback when adding controls.
