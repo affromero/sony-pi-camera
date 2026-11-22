@@ -5,7 +5,7 @@ version = "0.0.0"
 description = "A Raspberry Pi web dashboard for a USB-connected Sony α7 III"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["Pillow>=11"]
 
 [project.optional-dependencies]
 ftps = [

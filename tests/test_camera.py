@@ -1,6 +1,7 @@
 """Exercise camera access and photo management through HTTP."""
 
 import importlib.util
+import io
 import json
 import os
 import socket
@@ -13,6 +14,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from unittest import mock
+
+from PIL import Image
 
 SERVER = Path(__file__).resolve().parents[1] / "camera/camera.py"
 
@@ -140,6 +143,11 @@ class CameraTest(unittest.TestCase):
             'case "$1" in\n'
             "--capture-preview) printf frame > preview.jpg; "
             "printf 'Current: 59\\nCurrent: 20971734\\n';;\n"
+            '--get-config) if [ "$2" = "imagequality" ]; then '
+            'printf "Current: %s\\n" "$(cat "$HOME/quality")"; '
+            'else cat "$HOME/viewport"; fi;;\n'
+            '--keep) touch "$HOME/shutter"; out="${4%.%C}"; '
+            'cp "$HOME/original.jpg" "$out.jpg";;\n'
             "*) exit 1;;\nesac\n"
         )
         fake_camera.chmod(0o700)
@@ -189,6 +197,54 @@ class CameraTest(unittest.TestCase):
             self.assertEqual(response.headers["X-Magnification"], "5.9")
             self.assertEqual(response.headers["X-Magnifier-X"], "0.5")
             self.assertEqual(response.headers["X-Magnifier-Y"], "0.5")
+
+    def test_capture_saves_magnified_sensor_region_with_orientation(self):
+        viewport = {"ratio": 5.9, "x": 0.75, "y": 0.25}
+        (self.home / "viewport").write_text(
+            f"Current: 59\nCurrent: {(480 << 16) | 107}\n"
+        )
+        (self.home / "quality").write_text("Extra Fine")
+        original = Image.new("RGB", (320, 200), "red")
+        original.paste((0, 250, 0), (208, 30, 271, 70))
+        exif = Image.Exif()
+        exif[274] = 6
+        original.save(self.home / "original.jpg", exif=exif)
+        with self.request(
+            "/api/capture", self.token, {"viewport": viewport}, self.base
+        ) as response:
+            (name,) = json.load(response)["files"]
+        self.addCleanup((self.home / "camera-photos" / name).unlink)
+        for prefix in ("/api/photos/", "/api/thumbnail/"):
+            with self.request(prefix + name, self.token) as response:
+                with Image.open(io.BytesIO(response.read())) as saved:
+                    self.assertEqual(saved.size, (34, 54))
+                    r, g, b = saved.getpixel((0, 0))
+                    self.assertGreater(g, max(r, b) + 150)
+
+    def test_capture_rejects_stale_frame_and_raw_only_before_shutter(self):
+        (self.home / "shutter").unlink(missing_ok=True)
+        (self.home / "viewport").write_text("Current: 59\nCurrent: 20971734")
+        (self.home / "quality").write_text("RAW")
+        for ratio, message in [(1, "Framing changed"), (5.9, "Select JPEG")]:
+            with self.assertRaises(urllib.error.HTTPError) as error:
+                self.request(
+                    "/api/capture",
+                    self.token,
+                    {"viewport": {"ratio": ratio, "x": 0.5, "y": 0.5}},
+                    self.base,
+                )
+            self.assertIn(message, json.load(error.exception)["error"])
+            self.assertFalse((self.home / "shutter").exists())
+
+    def test_full_frame_capture_retains_camera_file(self):
+        (self.home / "viewport").write_text("Current: 0\nCurrent: 20971734")
+        original = self.home / "original.jpg"
+        Image.new("RGB", (96, 64), "blue").save(original)
+        with self.request("/api/capture", self.token, {}, self.base) as resp:
+            (name,) = json.load(resp)["files"]
+        saved = self.home / "camera-photos" / name
+        self.addCleanup(saved.unlink)
+        self.assertEqual(saved.read_bytes(), original.read_bytes())
 
     def test_delete_requires_same_origin_and_deletes_selected_photo(self):
         with self.assertRaises(urllib.error.HTTPError) as error:

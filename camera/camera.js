@@ -17,9 +17,16 @@ let selecting = false;
 let dragging = null;
 let moving = false;
 let magnified = false;
+let displayedViewport = null;
+let previewRevision = 0;
+let capturing = false;
+function updateShutter() {
+  $('capture').disabled = !displayedViewport || selecting || moving || capturing;
+}
 const surface = $('focus-target');
 function selectionMode(enabled) {
   selecting = enabled;
+  updateShutter();
   dragging = null;
   surface.classList.toggle('select-area', enabled);
   surface.setAttribute('aria-label', enabled ? 'Choose magnifier area. Enter selects the center.' : 'Focus on live preview. Enter focuses at the center.');
@@ -37,6 +44,9 @@ $('mag-select').onclick = () => selectionMode(!selecting);
 async function moveMagnifier(request) {
   if (moving) return;
   moving = true;
+  previewRevision++;
+  displayedViewport = null;
+  updateShutter();
   $('mag-select').disabled = $('mag-exit').disabled = true;
   $('mag-help').textContent = request.action === 'exit' ? 'Returning to full frame…' : 'Moving the camera magnifier…';
   try {
@@ -47,6 +57,9 @@ async function moveMagnifier(request) {
     $('mag-help').textContent = error.message;
   } finally {
     moving = false;
+    previewRevision++;
+    displayedViewport = null;
+    updateShutter();
     $('mag-select').disabled = $('mag-exit').disabled = false;
   }
 }
@@ -98,7 +111,14 @@ function showMagnifier(response) {
   const ratio = Number(response.headers.get('X-Magnification')) || 1;
   const active = ratio > 1;
   if (magnified && !active) $('preview-status').textContent = 'Tap to focus';
-  if (active) $('preview-status').textContent = 'Magnified preview';
+  if (active) $('preview-status').textContent = 'Capture this crop';
+  const x = Number(response.headers.get('X-Magnifier-X'));
+  const y = Number(response.headers.get('X-Magnifier-Y'));
+  displayedViewport = {ratio,x,y};
+  const label = active ? 'Take cropped photo' : 'Take photo';
+  $('capture').setAttribute('aria-label', label);
+  $('capture').title = label;
+  updateShutter();
   overview.hidden = !active;
   if (active && selecting && !moving) selectionMode(false);
   magnified = active;
@@ -112,8 +132,6 @@ function showMagnifier(response) {
     return;
   }
   $('focus-marker').hidden = true;
-  const x = Number(response.headers.get('X-Magnifier-X'));
-  const y = Number(response.headers.get('X-Magnifier-Y'));
   const ctx = overview.getContext('2d');
   ctx.drawImage(fullFrame, 0, 0);
   ctx.strokeStyle = '#ff9500';
@@ -128,19 +146,22 @@ async function api(path, options = {}) {
 }
 async function post(path, value) { return api(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(value)}); }
 async function preview() {
-  if (!busy) {
+  if (!busy && !moving && !capturing) {
+    const revision = previewRevision;
     try {
       const response = await api('/api/preview');
       const url = URL.createObjectURL(await response.blob());
       $('preview').src = url;
       $('preview').hidden = false;
       await $('preview').decode();
-      showMagnifier(response);
+      if (revision === previewRevision) showMagnifier(response);
       if (imageUrl) URL.revokeObjectURL(imageUrl);
       imageUrl = url;
       $('preview-message').hidden = true;
       $('status').textContent = 'Connected';
     } catch (error) {
+      displayedViewport = null;
+      updateShutter();
       if (selecting && !moving) selectionMode(false);
       $('mag-select').disabled = true;
       overview.hidden = true;
@@ -391,7 +412,26 @@ async function photos() {
     renderPhotos();
   } catch (error) { if (request === libraryRequest) $('photos-message').textContent = error.message; }
 }
-$('capture').onclick = async () => { busy = true; $('capture').disabled = true; $('capture-status').textContent = 'Capturing…'; try { await post('/api/capture', {}); $('capture-status').textContent = 'Photo saved'; await photos(); } catch (error) { $('capture-status').textContent = error.message; } finally { busy = false; $('capture').disabled = false; } };
+updateShutter();
+$('capture').onclick = async () => {
+  if ($('capture').disabled) return;
+  const viewport = displayedViewport;
+  capturing = true;
+  updateShutter();
+  $('capture-status').textContent = 'Capturing…';
+  try {
+    await post('/api/capture', {viewport});
+    $('capture-status').textContent = viewport.ratio > 1 ? 'Cropped photo saved' : 'Photo saved';
+    await photos();
+  } catch (error) {
+    $('capture-status').textContent = error.message;
+  } finally {
+    capturing = false;
+    displayedViewport = null;
+    previewRevision++;
+    updateShutter();
+  }
+};
 for (const id of ['photo-from','photo-through','photo-sort']) $(id).onchange = renderPhotos;
 function syncPhotos() { if (token && !document.hidden) photos(); }
 setInterval(syncPhotos, 5000);

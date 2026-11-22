@@ -15,7 +15,7 @@ Power the Pi separately. Connect the camera to the Pi's USB data port using a da
 
 ```sh
 sudo apt update
-sudo apt install git gphoto2 libimage-exiftool-perl openssl
+sudo apt install git gphoto2 libimage-exiftool-perl openssl python3-pil
 git clone https://github.com/affromero/sony-pi-camera.git
 cd sony-pi-camera
 gphoto2 --auto-detect
@@ -48,7 +48,7 @@ ssh user@hostname.local 'cat ~/.config/sony-pi-camera/camera-token'
 - Set the lens to AF and the camera's focus area to Flexible Spot. Tap the live preview to move the focus point and autofocus. A green marker indicates the body reported a lock.
 - Choose **Select area to magnify** below the live preview, then drag a box around the detail you want to inspect. On a phone you can also tap its center. The camera uses its supported magnification steps. The orange outline on the overview shows the area it actually displays. Choose **Full frame** to select another area or tap to focus.
 - The dashboard polls the battery level, shooting mode and settings. APS-C crop is adjustable on the body and displayed in the browser. Aperture choices currently assume the tested Sigma lens.
-- The shutter button downloads a capture to `~/camera-photos`. The gallery updates automatically. Open a thumbnail to inspect the original, download it or delete the Pi copy.
+- Press the shutter in a magnified view to save that framing as a JPEG in the Pi gallery. The Pi crops the camera's full-resolution JPEG at its native pixel size, so a tighter crop has fewer pixels. Choose a JPEG or RAW + JPEG capture setting for framed shots. At **Full frame**, the shutter downloads the camera files directly.
 - Existing SD card folders are unavailable over this body's PC Remote connection. The gallery also picks up photos transferred into the same directory.
 
 ## Optional camera uploads over Wi-Fi
@@ -94,7 +94,7 @@ uv run --frozen python -m unittest discover -s tests -v
 node --check camera/camera.js
 ```
 
-The dashboard uses the Python standard library. Camera operations and thumbnails also need the system commands `gphoto2` and `exiftool`. The Pi installer runs services under the OS Python. For local receiver development, `uv sync --frozen --extra ftps` installs pyftpdlib and pyOpenSSL. Update dependencies in `pyproject.toml`, run `uv lock` and commit the updated lockfile.
+The dashboard uses Pillow for cropped JPEGs. Camera operations and thumbnails also need the system commands `gphoto2` and `exiftool`. The Pi installer runs services under the OS Python. For local receiver development, `uv sync --frozen --extra ftps` installs pyftpdlib and pyOpenSSL. Update dependencies in `pyproject.toml`, run `uv lock` and commit the updated lockfile.
 
 The tests start the HTTP service on loopback, use a temporary photo library and simulate the USB device. CI checks the lockfile, imports the optional FTPS receiver and runs the tests on Python 3.11 and 3.13. Test changes to capture, focus or magnification on a connected body before reporting hardware support.
 

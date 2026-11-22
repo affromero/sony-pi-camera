@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Private camera interface. Access through an SSH tunnel only."""
 
+import io
 import json
 import mimetypes
 import os
@@ -15,6 +16,8 @@ from fractions import Fraction
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
+
+from PIL import Image, ImageOps
 
 ROOT = Path(__file__).resolve().parent
 PHOTOS = (Path.home() / "camera-photos").resolve()
@@ -223,6 +226,87 @@ def photo(name):
     return path
 
 
+def save_framed_jpeg(source: Path, target: Path, state: dict) -> None:
+    with Image.open(source) as image:
+        if image.format != "JPEG":
+            raise ValueError("The camera did not deliver a JPEG.")
+        width, height = image.size
+        w = max(1, round(width / state["ratio"]))
+        h = max(1, round(height / state["ratio"]))
+        x = max(0, min(width - w, round(state["x"] * width - w / 2)))
+        y = max(0, min(height - h, round(state["y"] * height - h / 2)))
+        # Sony's USB coordinates follow the sensor. Apply EXIF rotation
+        # after cropping to avoid rotating a full-size image in Pi memory.
+        cropped = image.crop((x, y, x + w, y + h))
+        framed = ImageOps.exif_transpose(cropped)
+        exif = image.getexif()
+        output_exif = Image.Exif()
+        for tag in (271, 272, 306):  # Make, model and timestamp.
+            if tag in exif:
+                output_exif[tag] = exif[tag]
+        exposure = exif.get_ifd(34665)
+        keep = (33434, 33437, 34855, 36867, 36868, 37386, 42036)
+        if exposure:
+            output_exif[34665] = {
+                k: exposure[k] for k in keep if k in exposure
+            }
+        framed.save(
+            target,
+            "JPEG",
+            quality=96,
+            subsampling=0,
+            exif=output_exif,
+            icc_profile=image.info.get("icc_profile"),
+        )
+
+
+def capture_photo(expected: dict | None) -> list[str]:
+    state = viewport(command("--get-config", "d22f", "--get-config", "d230"))
+    if expected is not None and (
+        not isinstance(expected, dict)
+        or any(type(expected.get(k)) not in (float, int) for k in state)
+        or any(expected[k] != state[k] for k in state)
+    ):
+        raise ValueError("Framing changed. Check the live view and try again.")
+    framed = state["ratio"] > 1
+    if (
+        framed
+        and setting("imagequality").get("current", "").strip().upper() == "RAW"
+    ):
+        raise ValueError("Select JPEG or RAW + JPEG for a magnified capture.")
+    name = time.strftime("%Y%m%d-%H%M%S") + "-" + secrets.token_hex(4)
+    with tempfile.TemporaryDirectory(prefix=".capture-", dir=PHOTOS) as tmp:
+        directory = Path(tmp)
+        output = command(
+            "--keep",
+            "--capture-image-and-download",
+            "--filename",
+            str(directory / (name + ".%C")),
+            cwd=directory,
+        )
+        files = sorted(directory.glob(name + ".*"))
+        if not files:
+            raise RuntimeError(
+                "The camera did not deliver a photo. " + output.strip()[-500:]
+            )
+        if framed:
+            jpeg = next(
+                (p for p in files if p.suffix.lower() in (".jpg", ".jpeg")),
+                None,
+            )
+            if jpeg is None:
+                raise RuntimeError(
+                    "The camera did not deliver a JPEG for this crop. "
+                    "Check the PC Remote RAW+J transfer setting."
+                )
+            target = directory / (name + "-framed.jpg")
+            save_framed_jpeg(jpeg, target, state)
+            files = [target]
+        for path in files:
+            path.replace(PHOTOS / path.name)
+        return [p.name for p in files]
+
+
 class Handler(BaseHTTPRequestHandler):
     def send(
         self, body, content_type="application/json", status=200, headers=None
@@ -340,6 +424,13 @@ class Handler(BaseHTTPRequestHandler):
                 )
             elif path.startswith("/api/thumbnail/"):
                 item = photo(unquote(path[len("/api/thumbnail/") :]))
+                if item.name.endswith("-framed.jpg"):
+                    with Image.open(item) as image:
+                        image.thumbnail((256, 256))
+                        encoded = io.BytesIO()
+                        image.save(encoded, "JPEG")
+                    self.send(encoded.getvalue(), "image/jpeg")
+                    return
                 result = subprocess.run(
                     ["exiftool", "-b", "-ThumbnailImage", str(item)],
                     capture_output=True,
@@ -382,24 +473,9 @@ class Handler(BaseHTTPRequestHandler):
             data = json.loads(self.rfile.read(length) or b"{}")
             path = urlsplit(self.path).path
             if path == "/api/capture":
-                name = (
-                    time.strftime("%Y%m%d-%H%M%S") + "-" + secrets.token_hex(4)
-                )
                 with LOCK:
-                    output = command(
-                        "--keep",
-                        "--capture-image-and-download",
-                        "--filename",
-                        str(PHOTOS / (name + ".%C")),
-                        cwd=PHOTOS,
-                    )
-                    saved = list(PHOTOS.glob(name + ".*"))
-                    if not saved:
-                        raise RuntimeError(
-                            "The camera did not deliver a photo. "
-                            + output.strip()[-500:]
-                        )
-                self.send({"ok": True, "files": [p.name for p in saved]})
+                    files = capture_photo(data.get("viewport"))
+                self.send({"ok": True, "files": files})
             elif path == "/api/magnifier":
                 action = data.get("action")
                 if action == "region":
