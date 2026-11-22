@@ -18,6 +18,47 @@ SERVER = Path(__file__).resolve().parents[1] / "camera/camera.py"
 
 
 class ApertureTest(unittest.TestCase):
+    def test_region_uses_native_levels_and_reports_measured_center(self):
+        spec = importlib.util.spec_from_file_location("camera", SERVER)
+        camera = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(camera)
+        ratio, x, y = 0, 320, 214
+
+        def usb(*args):
+            nonlocal ratio, x, y
+            if args[0] == "--get-config":
+                return f"Current: {ratio}\nCurrent: {(x << 16) | y}"
+            for press in args[1::4]:
+                if press == "focusmagnifyexit=1":
+                    ratio, x, y = 0, 320, 214
+                elif press == "focusmagnify=1":
+                    ratio = 59 if ratio == 0 else 117
+                else:
+                    dx, dy = {
+                        "focusmagnifyright=1": (3, 0),
+                        "focusmagnifyleft=1": (-3, 0),
+                        "focusmagnifyup=1": (0, -3),
+                        "focusmagnifydown=1": (0, 3),
+                    }[press]
+                    x, y = x + dx, y + dy
+            return ""
+
+        with (
+            mock.patch.object(camera, "command", side_effect=usb),
+            mock.patch.object(camera.time, "sleep"),
+        ):
+            for size, level in [(0, 5.9), (0.2, 5.9), (0.05, 11.7)]:
+                with self.subTest(size=size):
+                    state = camera.magnify_region(0.84, 0.37, size, size)
+                    self.assertEqual(state["ratio"], level)
+                    self.assertAlmostEqual(state["x"], 0.84, delta=0.008)
+                    self.assertAlmostEqual(state["y"], 0.37, delta=0.012)
+            state = camera.magnify_region(0, 1, 0, 0)
+            self.assertAlmostEqual(state["x"], 0.5 / 5.9, delta=0.008)
+            self.assertAlmostEqual(state["y"], 1 - 0.5 / 5.9, delta=0.012)
+            with self.assertRaises(ValueError):
+                camera.magnify_region(0.5, 0.5, float("nan"), 0.2)
+
     def test_focus_reports_camera_selected_point_and_lock(self):
         spec = importlib.util.spec_from_file_location("camera", SERVER)
         camera = importlib.util.module_from_spec(spec)

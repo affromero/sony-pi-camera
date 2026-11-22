@@ -130,6 +130,86 @@ def focus_at(x, y):
     }
 
 
+def viewport(output):
+    ratio, point = [
+        int(line[9:])
+        for line in output.splitlines()
+        if line.startswith("Current: ")
+    ]
+    return {
+        "ratio": max(1, ratio / 10),
+        "x": (point >> 16) / 640,
+        "y": (point & 65535) / 428,
+    }
+
+
+def magnifier_steps(action, count=1):
+    key = "focusmagnify" + action
+    return (
+        "--set-config-value",
+        key + "=1",
+        "--set-config-value",
+        key + "=0",
+    ) * count
+
+
+def move_magnifier(*buttons):
+    command(*buttons)
+    # The camera acknowledges button events before updating these properties.
+    time.sleep(0.35)
+    return viewport(command("--get-config", "d22f", "--get-config", "d230"))
+
+
+def magnify_region(x, y, width, height):
+    if any(
+        type(v) not in (int, float) or not 0 <= v <= 1
+        for v in (x, y, width, height)
+    ):
+        raise ValueError("Choose a region within the preview.")
+    state = move_magnifier(*magnifier_steps("exit"))
+    if state["ratio"] != 1:
+        raise RuntimeError("The camera could not return to the full frame.")
+    for _ in range(2):
+        state = move_magnifier(*magnifier_steps(""))
+        if state["ratio"] > 1:
+            break
+    else:
+        raise RuntimeError(
+            "The camera could not activate its focus magnifier."
+        )
+    # A tap selects the first level. The second native level is about twice
+    # the first; use the level closest to the box on a logarithmic scale.
+    size = max(width, height)
+    if size and size * state["ratio"] * 2**0.5 < 1:
+        previous = state["ratio"]
+        state = move_magnifier(*magnifier_steps(""))
+        if state["ratio"] <= previous:
+            raise RuntimeError("The camera could not increase magnification.")
+    margin = 0.5 / state["ratio"]
+    target_x = max(margin, min(1 - margin, x))
+    target_y = max(margin, min(1 - margin, y))
+    # Each press moves roughly three units on the 640 x 428 grid. Batch
+    # presses in one USB session and correct against the actual readback.
+    for _ in range(4):
+        dx = round((target_x - state["x"]) * 640 / 3)
+        dy = round((target_y - state["y"]) * 428 / 3)
+        if abs(dx) <= 1 and abs(dy) <= 1:
+            return state
+        before = state
+        state = move_magnifier(
+            *magnifier_steps("right" if dx > 0 else "left", abs(dx)),
+            *magnifier_steps("down" if dy > 0 else "up", abs(dy)),
+        )
+        if state["ratio"] != before["ratio"]:
+            raise RuntimeError("The camera left the selected magnification.")
+        if state == before:
+            break
+    raise RuntimeError(
+        "The camera could not reach that region. "
+        "Choose a region closer to the center."
+    )
+
+
 def photo(name):
     if not name or any(
         not part or part.startswith(".") for part in name.split("/")
@@ -203,18 +283,14 @@ class Handler(BaseHTTPRequestHandler):
                     images = list(Path(directory).glob("*.jpg"))
                     if not images:
                         raise RuntimeError("Camera returned no preview")
-                    ratio, point = [
-                        int(line[9:])
-                        for line in output.splitlines()
-                        if line.startswith("Current: ")
-                    ]
+                    state = viewport(output)
                     self.send(
                         images[0].read_bytes(),
                         "image/jpeg",
                         headers={
-                            "X-Magnification": str(max(1, ratio / 10)),
-                            "X-Magnifier-X": str((point >> 16) / 640),
-                            "X-Magnifier-Y": str((point & 65535) / 428),
+                            "X-Magnification": str(state["ratio"]),
+                            "X-Magnifier-X": str(state["x"]),
+                            "X-Magnifier-Y": str(state["y"]),
                         },
                     )
             elif path == "/api/settings":
@@ -324,17 +400,21 @@ class Handler(BaseHTTPRequestHandler):
                 self.send({"ok": True, "files": [p.name for p in saved]})
             elif path == "/api/magnifier":
                 action = data.get("action")
+                if action == "region":
+                    with LOCK:
+                        state = magnify_region(
+                            data.get("x"),
+                            data.get("y"),
+                            data.get("width"),
+                            data.get("height"),
+                        )
+                    self.send(state)
+                    return
                 if action not in ("", "exit", "left", "right", "up", "down"):
                     raise ValueError("Unknown magnifier action")
-                key = f"focusmagnify{action}"
                 with LOCK:
-                    command(
-                        "--set-config-value",
-                        f"{key}=1",
-                        "--set-config-value",
-                        f"{key}=0",
-                    )
-                self.send({"ok": True})
+                    state = move_magnifier(*magnifier_steps(action))
+                self.send({"ok": True, **state})
             elif path == "/api/focus":
                 with LOCK:
                     result = focus_at(data["x"], data["y"])

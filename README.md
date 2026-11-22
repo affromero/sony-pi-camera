@@ -5,6 +5,10 @@
 
 Control a USB-connected Sony α7 III from a browser on your local network. A Raspberry Pi serves the live preview, camera controls and photo gallery. This setup has been tested with an α7 III running firmware 4.04, a Sigma 35mm F1.2 DG DN Art and a Raspberry Pi Zero 2 W.
 
+## Why this exists
+
+I wanted to leave a Sony α7 III at a window and check the shot from another room. A Pi beside the camera keeps the USB connection open. From a phone or laptop on the same Wi-Fi, I can inspect focus, take a picture and open the original file without moving the camera or taking out its card.
+
 ## Connect the camera
 
 Power the Pi separately. Connect the camera to the Pi's USB data port using a data cable and, on a Zero, an OTG adapter. Set the camera's USB Connection to **PC Remote**. On the Pi, sign in as the account that will operate the camera and run the following commands.
@@ -42,7 +46,7 @@ ssh user@hostname.local 'cat ~/.config/pi-field-notes/camera-token'
 ## Shooting and reviewing photos
 
 - Set the lens to AF and the camera's focus area to Flexible Spot. Tap the live preview to move the focus point and autofocus. A green marker indicates the body reported a lock.
-- For a closer look before shooting, press **Magnify** and use the arrows to move around the frame. The camera supplies the magnified live image. An orange outline on the overview marks its position within the last full frame. Press **Full frame** to return.
+- Choose **Select area to magnify** below the live preview, then drag a box around the detail you want to inspect. On a phone you can also tap its center. The camera uses its supported magnification steps. The orange outline on the overview shows the area it actually displays. Choose **Full frame** to select another area or tap to focus.
 - The dashboard polls the battery level, shooting mode and settings. APS-C crop is adjustable on the body and displayed in the browser. Aperture choices currently assume the tested Sigma lens.
 - The shutter button downloads a capture to `~/camera-photos`. The gallery updates automatically. Open a thumbnail to inspect the original, download it or delete the Pi copy.
 - Existing SD card folders are unavailable over this body's PC Remote connection. The gallery also picks up photos transferred into the same directory.
@@ -80,15 +84,18 @@ The Pi can serve its library while the camera is disconnected. Capturing and liv
 
 ## Development
 
-Use Python 3.11 or newer, Node.js, pre-commit and ShellCheck. On Debian or Raspberry Pi OS, install them with `sudo apt install python3 nodejs pre-commit shellcheck`. On macOS, use `brew install python node pre-commit shellcheck`. Install the hooks and run the checks from the root of your checkout.
+Use uv, Node.js and ShellCheck. On macOS, install them with `brew install uv node shellcheck`. On Debian, install `nodejs` and `shellcheck` with apt and install uv using its [installation guide](https://docs.astral.sh/uv/getting-started/installation/). From the checkout, create a development environment and run the checks.
 
 ```sh
-pre-commit install --install-hooks
-pre-commit run --all-files
-python3 -m unittest discover -s tests -v
+uv sync --frozen --python 3.13
+uv run --frozen pre-commit install --install-hooks
+uv run --frozen pre-commit run --all-files
+uv run --frozen python -m unittest discover -s tests -v
 node --check camera/camera.js
 ```
 
-The tests start the HTTP service on loopback, use a temporary photo library and simulate the USB device. GitHub Actions runs the same checks on pull requests and pushes to `main`. Test changes to capture, focus or magnification on a connected body before reporting hardware support.
+The dashboard uses the Python standard library. Camera operations and thumbnails also need the system commands `gphoto2` and `exiftool`. The Pi installer runs services under the OS Python. For local receiver development, `uv sync --frozen --extra ftps` installs pyftpdlib and pyOpenSSL. Update dependencies in `pyproject.toml`, run `uv lock` and commit the updated lockfile.
+
+The tests start the HTTP service on loopback, use a temporary photo library and simulate the USB device. CI checks the lockfile, imports the optional FTPS receiver and runs the tests on Python 3.11 and 3.13. Test changes to capture, focus or magnification on a connected body before reporting hardware support.
 
 The archived Windows utility SonyAlphaUSB provided a reference for the α7 III focus-point coordinates. [gPhoto2](https://github.com/gphoto/gphoto2) · [SonyAlphaUSB](https://github.com/pixeltris/SonyAlphaUSB)

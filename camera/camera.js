@@ -13,23 +13,98 @@ overview.hidden = true;
 overview.setAttribute('aria-label', 'Magnified area within the full frame');
 $('preview').parentElement.append(overview);
 const fullFrame = overview.cloneNode();
-$('magnifier').onclick = async event => {
-  const button = event.target.closest('[data-mag]');
-  if (!button) return;
-  $('magnifier').disabled = true;
-  try {
-    await post('/api/magnifier', {action: button.dataset.mag});
-  } catch (error) {
-    $('preview-status').textContent = error.message;
-  } finally {
-    $('magnifier').disabled = false;
+let selecting = false;
+let dragging = null;
+let moving = false;
+let magnified = false;
+const surface = $('focus-target');
+function selectionMode(enabled) {
+  selecting = enabled;
+  dragging = null;
+  surface.classList.toggle('select-area', enabled);
+  surface.setAttribute('aria-label', enabled ? 'Choose magnifier area. Enter selects the center.' : 'Focus on live preview. Enter focuses at the center.');
+  surface.title = enabled ? 'Drag to select an area or tap a point' : 'Click or tap to focus';
+  $('mag-select').textContent = enabled ? 'Cancel selection' : 'Select area to magnify';
+  $('mag-help').textContent = enabled ? 'Drag a box around your subject, or tap its center.' : '';
+  $('mag-selection').hidden = true;
+  if (enabled) {
+    $('focus-marker').hidden = true;
+    surface.scrollIntoView({block:'nearest'});
+    surface.focus({preventScroll:true});
   }
+}
+$('mag-select').onclick = () => selectionMode(!selecting);
+async function moveMagnifier(request) {
+  if (moving) return;
+  moving = true;
+  $('mag-select').disabled = $('mag-exit').disabled = true;
+  $('mag-help').textContent = request.action === 'exit' ? 'Returning to full frame…' : 'Moving the camera magnifier…';
+  try {
+    await post('/api/magnifier', request);
+    selectionMode(false);
+  } catch (error) {
+    selectionMode(false);
+    $('mag-help').textContent = error.message;
+  } finally {
+    moving = false;
+    $('mag-select').disabled = $('mag-exit').disabled = false;
+  }
+}
+$('mag-exit').onclick = () => moveMagnifier({action:'exit'});
+function previewGeometry() {
+  const img = $('preview');
+  const box = img.getBoundingClientRect();
+  const scale = Math.min(box.width / img.naturalWidth, box.height / img.naturalHeight);
+  const width = img.naturalWidth * scale, height = img.naturalHeight * scale;
+  return {box, width, height, left:(box.width-width)/2, top:(box.height-height)/2};
+}
+function selectionPoint(event) {
+  const g = previewGeometry();
+  const clamp = value => Math.max(0, Math.min(1, value));
+  return {x:clamp((event.clientX-g.box.left-g.left)/g.width), y:clamp((event.clientY-g.box.top-g.top)/g.height)};
+}
+surface.onpointerdown = event => {
+  if (!selecting || moving || dragging || event.button !== 0) return;
+  const {box,width,height,left,top} = previewGeometry();
+  if (event.clientX < box.left + left || event.clientX > box.left + left + width ||
+      event.clientY < box.top + top || event.clientY > box.top + top + height) return;
+  dragging = {...selectionPoint(event), id:event.pointerId};
+  surface.setPointerCapture(event.pointerId);
+};
+surface.onpointermove = event => {
+  if (dragging?.id !== event.pointerId) return;
+  const end = selectionPoint(event), g = previewGeometry(), rect = $('mag-selection');
+  rect.style.left = g.left + Math.min(dragging.x,end.x)*g.width + 'px';
+  rect.style.top = g.top + Math.min(dragging.y,end.y)*g.height + 'px';
+  rect.style.width = Math.abs(dragging.x-end.x)*g.width + 'px';
+  rect.style.height = Math.abs(dragging.y-end.y)*g.height + 'px';
+  rect.hidden = false;
+};
+surface.onpointerup = event => {
+  if (dragging?.id !== event.pointerId) return;
+  const start = dragging, end = selectionPoint(event);
+  dragging = null;
+  const {width,height} = previewGeometry();
+  const spanX = Math.abs(start.x-end.x), spanY = Math.abs(start.y-end.y);
+  const tap = spanX*width < 5 && spanY*height < 5;
+  moveMagnifier({action:'region', x:(start.x+end.x)/2, y:(start.y+end.y)/2,
+    width:tap ? 0 : spanX, height:tap ? 0 : spanY});
+};
+surface.onpointercancel = () => { dragging = null; $('mag-selection').hidden = true; };
+surface.onkeydown = event => {
+  if (event.key === 'Escape' && selecting && !moving) selectionMode(false);
 };
 function showMagnifier(response) {
   const ratio = Number(response.headers.get('X-Magnification')) || 1;
   const active = ratio > 1;
+  if (magnified && !active) $('preview-status').textContent = 'Tap to focus';
+  if (active) $('preview-status').textContent = 'Magnified preview';
   overview.hidden = !active;
-  $('mag-pan').hidden = !active;
+  if (active && selecting && !moving) selectionMode(false);
+  magnified = active;
+  $('mag-select').hidden = active;
+  $('mag-select').disabled = moving;
+  $('mag-exit').hidden = !active;
   $('mag-level').textContent = ratio + '×';
   $('focus-target').hidden = active;
   if (!active) {
@@ -65,7 +140,18 @@ async function preview() {
       imageUrl = url;
       $('preview-message').hidden = true;
       $('status').textContent = 'Connected';
-    } catch (error) { $('focus-target').hidden = true; $('focus-marker').hidden = true; $('status').textContent = error.message.includes('Could not claim') ? 'Camera busy. Retrying.' : 'Camera unavailable. Retrying.'; $('status').title = error.message; $('preview').hidden = true; $('preview-message').hidden = false; $('preview-message').textContent = 'Preview unavailable'; }
+    } catch (error) {
+      if (selecting && !moving) selectionMode(false);
+      $('mag-select').disabled = true;
+      overview.hidden = true;
+      surface.hidden = true;
+      $('focus-marker').hidden = true;
+      $('status').textContent = error.message.includes('Could not claim') ? 'Camera busy. Retrying.' : 'Camera unavailable. Retrying.';
+      $('status').title = error.message;
+      $('preview').hidden = true;
+      $('preview-message').hidden = false;
+      $('preview-message').textContent = 'Preview unavailable';
+    }
   }
   setTimeout(preview, 500);
 }
@@ -73,13 +159,15 @@ const labels = {'iso':'ISO','shutterspeed':'Shutter speed','f-number':'Aperture'
 labels.sensorcrop = 'APS-C crop (1.5×)';
 labels.focusarea = 'Focus area';
 $('focus-target').onclick = async event => {
+  if (moving || magnified) return;
+  if (selecting) {
+    if (!event.detail) moveMagnifier({action:'region',x:0.5,y:0.5,width:0,height:0});
+    return;
+  }
   const target = $('focus-target');
   const img = $('preview');
   if (!img.naturalWidth || target.disabled) return;
-  const box = img.getBoundingClientRect();
-  const scale = Math.min(box.width / img.naturalWidth, box.height / img.naturalHeight);
-  const width = img.naturalWidth * scale, height = img.naturalHeight * scale;
-  const left = (box.width - width) / 2, top = (box.height - height) / 2;
+  const {box,width,height,left,top} = previewGeometry();
   const x = event.detail ? (event.clientX - box.left - left) / width : 0.5;
   const y = event.detail ? (event.clientY - box.top - top) / height : 0.5;
   if (x < 0 || x > 1 || y < 0 || y > 1) return;
