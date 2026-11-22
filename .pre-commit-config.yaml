@@ -14,7 +14,7 @@ repos:
       - id: check-added-large-files
         args: [--maxkb=2000]
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.21
+    rev: v0.17.5
     hooks:
       - id: ruff-check
         args: [--fix]
