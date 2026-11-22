@@ -37,6 +37,43 @@ function call(port, path, { method = 'GET', body, cookie, site = origin, host = 
   });
 }
 
+test('serves admins and read-only invitees on the same hostname', { timeout: 8000 }, async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'sony-camera-shared-'));
+  await initializeAdmin(directory, password);
+  const camera = {
+    async json(path) {
+      assert.equal(path, '/api/photos?details=1');
+      return { status: 200, data: [{ name: 'street.jpg' }] };
+    },
+  };
+  const server = await createViewer({ origin, directory, camera, mode: 'shared' });
+  const port = await listen(server);
+  t.after(async () => {
+    await new Promise((resolve) => server.close(resolve));
+    await rm(directory, { recursive: true, force: true });
+  });
+  const get = (path, cookie) => call(port, path, { cookie });
+  const post = (path, body, cookie) => call(port, path, { method: 'POST', body, cookie });
+  assert.equal((await get('/photos')).status, 401);
+  assert.equal((await get('/ai')).status, 401);
+  const owner = await post('/access/login', { password });
+  assert.equal(owner.status, 200);
+  assert.equal((await get('/session', owner.cookie)).data.role, 'admin');
+  assert.equal((await get('/ai', owner.cookie)).status, 200);
+  const invitation = await post('/access/issue-invitation', {}, owner.cookie);
+  assert.equal(invitation.data.origin, origin);
+  const body = { code: invitation.data.code };
+  const viewer = await post('/access/redeem-invitation', body);
+  assert.equal(viewer.status, 200);
+  assert.equal((await post('/access/redeem-invitation', body)).status, 401);
+  assert.deepEqual((await get('/session', viewer.cookie)).data, { role: 'viewer', privateStream: false });
+  assert.deepEqual((await get('/photos', viewer.cookie)).data, [{ name: 'street.jpg' }]);
+  assert.equal((await get('/settings', viewer.cookie)).status, 403);
+  assert.equal((await get('/ai', viewer.cookie)).status, 403);
+  assert.equal((await post('/delete', { name: 'street.jpg' }, viewer.cookie)).status, 403);
+  assert.equal((await post('/access/issue-invitation', {}, viewer.cookie)).status, 403);
+});
+
 test('keeps viewer invitations read-only and admin AI credentials private', { timeout: 8000 }, async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'sony-camera-test-'));
   let deleted = false;

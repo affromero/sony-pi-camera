@@ -78,6 +78,7 @@ export async function initializeAdmin(directory, password) {
 export async function createViewer({ origin, directory, mode = 'admin', inviteOrigin = origin, camera,
   privateStream = false }) {
   const guest = mode === 'guest';
+  const shared = mode === 'shared';
   const publicUrl = new URL(origin);
   if (publicUrl.protocol !== 'https:' || publicUrl.origin !== origin || !camera)
     throw new Error('Invalid viewer configuration');
@@ -111,13 +112,13 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
     const { principal, session } = await access.authenticate(token);
     const admin = session.principalId !== null && principal?.role === 'owner' && session.principalId === principal.id;
     if (admin && !guest) return { role: 'admin' };
-    if (!guest || ownerOnly || session.principalId !== null || session.admission !== 'invitation')
+    if (!(guest || shared) || ownerOnly || session.principalId !== null || session.admission !== 'invitation')
       throw new AccessError('forbidden');
     return { role: 'viewer' };
   }
 
   async function handleAccess(request, response, action) {
-    if (guest !== (action === 'redeem-invitation') && action !== 'logout')
+    if (!shared && guest !== (action === 'redeem-invitation') && action !== 'logout')
       return send(response, 404, { error: 'Not found.' });
     if (!(request.method === 'GET' && ['invitations', 'sessions'].includes(action)) &&
         !(request.method === 'POST' && accessPosts.has(action))) return send(response, 404, { error: 'Not found.' });
@@ -177,7 +178,7 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
     }
     if (route === 'GET /session') {
       const session = await authenticate(request, false);
-      return send(response, 200, { ...session, privateStream: !guest && privateStream });
+      return send(response, 200, { ...session, privateStream: session.role === 'admin' && privateStream });
     }
     if (route === 'GET /stream' && privateStream) {
       const authorize = () => authenticate(request, true);
@@ -243,14 +244,18 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.log('Camera admin configured.');
   } else {
     const cameraToken = (await readFile(join(homedir(), '.config/sony-pi-camera/camera-token'), 'utf8')).trim();
-    if (!cameraToken || process.env.ADMIN_ORIGIN === process.env.VIEWER_ORIGIN)
-      throw new Error('Configure separate admin and viewer origins and a camera key');
+    if (!cameraToken) throw new Error('Configure a camera key');
     const camera = createCamera({ cameraToken, port: Number(process.env.PI_CAMERA_PORT ?? 8765) });
     const options = { directory, camera };
-    const admin = await createViewer({ ...options, origin: process.env.ADMIN_ORIGIN, inviteOrigin: process.env.VIEWER_ORIGIN,
-      privateStream: process.env.PRIVATE_PREVIEW_STREAM === '1' });
-    const broker = await createViewer({ ...options, origin: process.env.VIEWER_ORIGIN, mode: 'guest' });
-    admin.listen(join(process.env.RUNTIME_DIRECTORY, 'admin.sock'));
+    const adminOrigin = process.env.ADMIN_ORIGIN;
+    const viewerOrigin = process.env.VIEWER_ORIGIN;
+    const shared = adminOrigin === viewerOrigin;
+    if (!shared) {
+      const admin = await createViewer({ ...options, origin: adminOrigin, inviteOrigin: viewerOrigin,
+        privateStream: process.env.PRIVATE_PREVIEW_STREAM === '1' });
+      admin.listen(join(process.env.RUNTIME_DIRECTORY, 'admin.sock'));
+    }
+    const broker = await createViewer({ ...options, origin: viewerOrigin, mode: shared ? 'shared' : 'guest' });
     const brokerPath = join(process.env.RUNTIME_DIRECTORY, 'guest.sock');
     broker.listen(brokerPath, async () => { await chmod(brokerPath, 0o660); });
   }

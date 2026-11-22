@@ -148,9 +148,11 @@ sudo chmod 600 "/etc/sony-pi-viewer-$USER.conf"
 sudo systemctl enable --now "sony-pi-viewer@$USER.service" "sony-pi-public-viewer@$USER.service"
 ```
 
-Route the public hostname to `unix:/run/sony-camera-public-$USER/viewer.sock` on the Pi. Route the admin hostname privately over LAN or VPN to `/run/sony-camera-$USER/admin.sock` using a proxy with permission to access the socket. Preserve each hostname and bypass caching. The public connector needs access only to the public socket.
+Route the public hostname to `unix:/run/sony-camera-public-$USER/viewer.sock` on the Pi. Set `ADMIN_ORIGIN` and `VIEWER_ORIGIN` to that same HTTPS origin to offer admin password login and viewer invitations on one page. The admin password unlocks controls and AI settings. Invited viewers can open the preview and gallery.
 
-Open the private admin URL and create a link under **Viewer invitations**. Share one link per recipient.
+For a separate private admin hostname, set distinct origins and route the admin hostname over LAN or VPN to `/run/sony-camera-$USER/admin.sock`. Preserve the Host header and bypass caching for either setup. The public connector needs access only to the public socket.
+
+Sign in as admin and create a link under **Viewer invitations**. Share one link per recipient.
 
 ## Daily photos
 
