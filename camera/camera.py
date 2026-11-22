@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Private camera interface. Access through an SSH tunnel only."""
 
+import base64
 import io
 import json
 import mimetypes
@@ -66,13 +67,13 @@ def camera_control() -> Iterator[None]:
         CONTROL.release()
 
 
-def command(*args, cwd=None):
+def command(*args, cwd=None, timeout=90):
     result = subprocess.run(
         ["gphoto2", *args],
         cwd=cwd,
         capture_output=True,
         text=True,
-        timeout=90,
+        timeout=timeout,
         check=False,
     )
     if result.returncode:
@@ -129,10 +130,10 @@ def parse_setting(name, output, mode=None):
     return result
 
 
-def settings_snapshot():
+def settings_snapshot(timeout=90):
     names = ("expprogram", *SETTINGS, "batterylevel")
     args = [arg for name in names for arg in ("--get-config", name)]
-    blocks = command(*args).split("\nEND\n")
+    blocks = command(*args, timeout=timeout).split("\nEND\n")
     if len(blocks) != len(names) + 1:
         raise RuntimeError("The camera returned an incomplete settings list.")
     mode = parse_setting("expprogram", blocks[0]).get("current", "Unavailable")
@@ -363,9 +364,11 @@ class Handler(BaseHTTPRequestHandler):
     ):
         if isinstance(body, (dict, list)):
             body = json.dumps(body).encode()
+        stream = isinstance(body, io.BufferedReader)
+        length = os.fstat(body.fileno()).st_size if stream else len(body)
         self.send_response(status)
         self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Content-Length", str(length))
         self.send_header("Cache-Control", "no-store")
         for key, value in (headers or {}).items():
             self.send_header(key, value)
@@ -376,7 +379,14 @@ class Handler(BaseHTTPRequestHandler):
             "frame-ancestors 'none'; base-uri 'none'",
         )
         self.end_headers()
-        self.wfile.write(body)
+        if stream:
+            try:
+                if length:
+                    self.connection.sendfile(body, count=length)
+            except OSError:
+                self.close_connection = True
+        else:
+            self.wfile.write(body)
 
     def authorized(self):
         host = self.headers.get("Host", "")
@@ -403,9 +413,14 @@ class Handler(BaseHTTPRequestHandler):
         if not self.authorized():
             self.send({"error": "Unauthorized"}, status=403)
             return
+        advice = path == "/api/advice-input"
+        if advice and self.server.scheme != "http":
+            self.send({"error": "Not found"}, status=404)
+            return
         try:
-            if path == "/api/preview":
-                with camera_read(), tempfile.TemporaryDirectory() as directory:
+            if path == "/api/preview" or advice:
+                reservation = camera_control if advice else camera_read
+                with reservation(), tempfile.TemporaryDirectory() as directory:
                     output = command(
                         "--capture-preview",
                         "--filename",
@@ -415,12 +430,26 @@ class Handler(BaseHTTPRequestHandler):
                         "--get-config",
                         "d230",
                         cwd=directory,
+                        timeout=10 if advice else 90,
                     )
                     images = list(Path(directory).glob("*.jpg"))
                     if not images:
                         raise RuntimeError("Camera returned no preview")
                     state = viewport(output)
+                    if advice:
+                        if images[0].stat().st_size > 2 * 1024 * 1024:
+                            raise RuntimeError("Camera preview is too large.")
+                        settings = settings_snapshot(timeout=8)
                     frame = images[0].read_bytes()
+                if advice:
+                    self.send(
+                        {
+                            "jpeg": base64.b64encode(frame).decode("ascii"),
+                            "settings": settings,
+                            "magnification": state["ratio"],
+                        }
+                    )
+                    return
                 self.send(
                     frame,
                     "image/jpeg",
@@ -488,11 +517,12 @@ class Handler(BaseHTTPRequestHandler):
                 self.send(result.stdout, "image/jpeg")
             elif path.startswith("/api/photos/"):
                 item = photo(unquote(path[len("/api/photos/") :]))
-                self.send(
-                    item.read_bytes(),
-                    mimetypes.guess_type(item.name)[0]
-                    or "application/octet-stream",
-                )
+                with item.open("rb") as original:
+                    self.send(
+                        original,
+                        mimetypes.guess_type(item.name)[0]
+                        or "application/octet-stream",
+                    )
             else:
                 self.send({"error": "Not found"}, status=404)
         except CameraBusy as exc:

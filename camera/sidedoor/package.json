@@ -1,0 +1,11 @@
+{
+  "name": "sony-pi-camera-sidedoor",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": { "test": "node --test ../../tests/*.test.mjs" },
+  "dependencies": {
+    "thesidedoor-core": "0.5.8",
+    "thesidedoor-flock": "0.5.8"
+  }
+}

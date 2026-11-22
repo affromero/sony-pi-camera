@@ -36,6 +36,16 @@ jobs:
         run: uv audit --locked
       - name: Check dashboard JavaScript
         run: node --check camera/camera.js
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        if: matrix.python == '3.13'
+        with:
+          node-version: "22"
+      - name: Test scheduled AI advice
+        if: matrix.python == '3.13'
+        working-directory: camera/sidedoor
+        run: |
+          npm ci
+          npm test
       - name: Run camera service tests
         run: uv run --frozen --extra ftps python -m unittest discover -s tests -v
       - name: Import optional FTPS receiver

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sony Live Camera</title>
+  <link rel="stylesheet" href="/viewer.css">
+  <script src="/viewer.js" type="module"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Sony Live Camera</h1>
+      <button id="lock" type="button" hidden>Lock</button>
+    </header>
+    <form id="unlock" hidden>
+      <label for="password">Admin password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" maxlength="256" required>
+      <button type="submit">Open as admin</button>
+    </form>
+    <form id="invite" hidden>
+      <button type="submit">Accept camera invitation</button>
+    </form>
+    <p id="status" role="status"></p>
+    <section id="camera" hidden>
+      <div class="preview">
+        <img id="preview" alt="Latest camera preview" hidden>
+        <p id="preview-status" role="status">Waiting for the camera…</p>
+      </div>
+      <section id="admin" hidden>
+        <details>
+          <summary>Camera settings</summary>
+          <div id="settings"></div>
+          <button id="refresh-settings" type="button">Read settings</button>
+        </details>
+        <details>
+          <summary>Viewer invitations</summary>
+          <form id="issue">
+            <label for="confirm-password">Admin password</label>
+            <input id="confirm-password" type="password" autocomplete="current-password" required>
+            <button type="submit">Create single-use invitation</button>
+            <label for="invite-link" hidden>Invitation link</label>
+            <input id="invite-link" type="text" readonly hidden>
+          </form>
+          <div id="viewer-sessions"></div>
+          <button id="refresh-sessions" type="button">Show active viewers</button>
+        </details>
+        <details>
+          <summary>AI advice for scheduled captures</summary>
+          <form id="ai">
+            <label><input id="ai-enabled" type="checkbox"> Analyze a preview before each scheduled shot</label>
+            <label for="ai-provider">Provider</label>
+            <select id="ai-provider"><option value="">Choose provider</option></select>
+            <label for="ai-model">Vision model</label>
+            <input id="ai-model" type="text" maxlength="120">
+            <label for="ai-key">Provider API key</label>
+            <input id="ai-key" type="password" maxlength="4096" autocomplete="off">
+            <label for="ai-prompt">Photo goal</label>
+            <textarea id="ai-prompt" maxlength="2000" rows="4"></textarea>
+            <button type="submit">Save AI settings</button>
+            <button id="check-ai" type="button">Check saved API key</button>
+          </form>
+        </details>
+        <p id="admin-status" role="status"></p>
+      </section>
+      <div class="gallery-heading">
+        <h2>Photos</h2>
+        <button id="refresh" type="button">Refresh</button>
+      </div>
+      <ul id="photos"></ul>
+    </section>
+    <noscript>Enable JavaScript to open the camera viewer.</noscript>
+  </main>
+</body>
+</html>

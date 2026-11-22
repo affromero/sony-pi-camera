@@ -1,0 +1,39 @@
+:root {
+  color-scheme: dark;
+  background: #191917;
+  color: #f4efe6;
+  font: 1rem/1.5 "Avenir Next", "Trebuchet MS", sans-serif;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; }
+main { margin: 0 auto; max-width: 70rem; padding: clamp(1rem, 5vw, 4rem); }
+header, .gallery-heading, li { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+h1, h2 { font-family: Georgia, serif; font-weight: normal; margin: 0; }
+h1 { font-size: clamp(2rem, 7vw, 4.4rem); line-height: 1.05; }
+h2 { font-size: 2rem; }
+header { border-top: 2px solid #e5a872; padding-top: 1.25rem; }
+form { display: grid; gap: .7rem; max-width: 24rem; margin-top: 2.5rem; }
+input, button, select, textarea, a { font: inherit; }
+input, button, select, textarea { padding: .55rem .8rem; border: 1px solid #a69b89; border-radius: .15rem; }
+input, select, textarea { background: #252421; }
+button { color: #f4efe6; background: transparent; cursor: pointer; }
+form button { color: #191917; background: #e5a872; border-color: #e5a872; }
+:focus-visible { outline: 2px solid #ffc18c; outline-offset: 3px; }
+p { color: #d0c6b8; }
+.preview { display: grid; place-items: center; aspect-ratio: 3 / 2; background: #10100f; position: relative; }
+.preview img { position: absolute; width: 100%; height: 100%; object-fit: contain; }
+.preview p { z-index: 1; background: #10100f; padding: .25rem .75rem; }
+.gallery-heading { margin-top: 2rem; }
+ul { padding: 0; }
+li { border-top: 1px solid #59544d; padding: .6rem 0; overflow-wrap: anywhere; }
+li span { color: #d0c6b8; white-space: nowrap; }
+a { color: #ffbc86; }
+details { padding: .8rem 0; border-bottom: 1px solid #59544d; }
+summary { cursor: pointer; }
+details form { margin-top: 1rem; }
+#settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: .75rem; margin: 1rem 0; }
+#settings label { display: grid; gap: .3rem; align-content: start; }
+#viewer-sessions { display: grid; gap: .5rem; margin: 1rem 0; }
+.photo-actions { display: flex; gap: .7rem; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
