@@ -1,5 +1,6 @@
 [project]
 name = "sony-pi-camera"
+authors = [{ name = "Andrés Romero", email = "me@afromero.co" }]
 version = "0.0.0"
 description = "A Raspberry Pi web dashboard for a USB-connected Sony α7 III"
 readme = "README.md"
