@@ -190,11 +190,13 @@ def magnify_region(x, y, width, height):
     target_y = max(margin, min(1 - margin, y))
     # Each press moves roughly three units on the 640 x 428 grid. Batch
     # presses in one USB session and correct against the actual readback.
-    for _ in range(4):
+    for attempt in range(5):
         dx = round((target_x - state["x"]) * 640 / 3)
         dy = round((target_y - state["y"]) * 428 / 3)
         if abs(dx) <= 1 and abs(dy) <= 1:
             return state
+        if attempt == 4:
+            break
         before = state
         state = move_magnifier(
             *magnifier_steps("right" if dx > 0 else "left", abs(dx)),
