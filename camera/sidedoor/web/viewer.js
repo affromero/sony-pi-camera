@@ -14,6 +14,8 @@ let galleryRequest = 0;
 let timer;
 let imageUrl;
 let admin = false;
+let privateStream = false;
+let streamRequest;
 let inviteCode = new URLSearchParams(location.hash.slice(1)).get('invite');
 if (inviteCode) history.replaceState(null, '', location.pathname);
 
@@ -21,6 +23,7 @@ function locked() {
   generation++;
   galleryRequest++;
   clearTimeout(timer);
+  streamRequest?.abort();
   if (imageUrl) URL.revokeObjectURL(imageUrl);
   imageUrl = undefined;
   preview.removeAttribute('src');
@@ -34,6 +37,7 @@ function locked() {
   if (unlock.hidden && !inviteCode && document.body.hasAttribute('data-guest'))
     status.textContent = 'Open the invitation link from the camera owner.';
   admin = false;
+  privateStream = false;
   showAdmin(false);
 }
 
@@ -78,25 +82,87 @@ function renderPhotos(entries) {
   }
 }
 
+function showFrame(blob) {
+  if (imageUrl) URL.revokeObjectURL(imageUrl);
+  imageUrl = URL.createObjectURL(blob);
+  preview.src = imageUrl;
+  preview.hidden = false;
+  previewStatus.hidden = true;
+}
+
+async function* streamFrames(body) {
+  const reader = body.getReader();
+  let unread = new Uint8Array();
+  const decoder = new TextDecoder();
+  async function fill() {
+    while (unread.length === 0) {
+      const part = await reader.read();
+      if (part.done) throw new Error('Preview stream ended');
+      unread = part.value;
+    }
+  }
+  try {
+    for (;;) {
+      const header = [];
+      let delimiter = 0;
+      while (delimiter !== 0x0d0a0d0a && header.length < 128) {
+        await fill();
+        const byte = unread[0];
+        unread = unread.subarray(1);
+        header.push(byte);
+        delimiter = (delimiter << 8) | byte;
+      }
+      const text = decoder.decode(Uint8Array.from(header));
+      const match = /^--sony-preview\r\nContent-Type: image\/jpeg\r\nContent-Length: (\d+)\r\n\r\n$/.exec(text);
+      const size = Number(match?.[1]);
+      if (!Number.isInteger(size) || size < 4 || size > 2 * 1024 * 1024)
+        throw new Error('Invalid preview frame');
+      const bytes = new Uint8Array(size + 2);
+      for (let offset = 0; offset < bytes.length;) {
+        await fill();
+        const count = Math.min(bytes.length - offset, unread.length);
+        bytes.set(unread.subarray(0, count), offset);
+        unread = unread.subarray(count);
+        offset += count;
+      }
+      if (bytes[size] !== 13 || bytes[size + 1] !== 10) throw new Error('Invalid preview delimiter');
+      yield new Blob([bytes.subarray(0, size)], { type: 'image/jpeg' });
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+}
+
 async function refreshPreview() {
   clearTimeout(timer);
+  streamRequest?.abort();
   const current = ++generation;
   if (document.hidden || camera.hidden) return;
   try {
+    if (privateStream) {
+      streamRequest = new AbortController();
+      const response = await fetch('/stream', { signal: streamRequest.signal });
+      if (current !== generation) return;
+      if (response.status === 401) return locked();
+      if (!response.ok || !response.body) throw new Error();
+      for await (const frame of streamFrames(response.body)) {
+        if (current !== generation) return;
+        showFrame(frame);
+      }
+      return;
+    }
     const response = await fetch('/preview');
     if (current !== generation) return;
     if (response.status === 401) return locked();
     if (!response.ok) throw new Error();
     const blob = await response.blob();
     if (current !== generation) return;
-    if (imageUrl) URL.revokeObjectURL(imageUrl);
-    imageUrl = URL.createObjectURL(blob);
-    preview.src = imageUrl;
-    preview.hidden = false;
-    previewStatus.hidden = true;
+    showFrame(blob);
   } catch {
     if (current === generation) {
-      previewStatus.textContent = preview.hidden ? 'Preview unavailable.' : 'Showing the last frame.';
+      previewStatus.textContent = privateStream ? 'Live stream interrupted. Reconnecting…' :
+        preview.hidden ? 'Preview unavailable.' : 'Showing the last frame.';
       previewStatus.hidden = false;
     }
   } finally {
@@ -171,8 +237,9 @@ document.addEventListener('visibilitychange', refreshPreview);
 async function enter() {
   const response = await fetch('/session');
   if (!response.ok) return locked();
-  const { role } = await response.json();
+  const { role, privateStream: streaming } = await response.json();
   admin = role === 'admin';
+  privateStream = admin && streaming;
   camera.hidden = lock.hidden = false;
   unlock.hidden = invite.hidden = true;
   showAdmin(admin);

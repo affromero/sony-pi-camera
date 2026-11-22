@@ -11,6 +11,7 @@ import { accessErrorStatus, cookieValue, createAccessHandler } from 'thesidedoor
 import { FileStateStore } from 'thesidedoor-core/storage';
 import { createAiConfig } from '../ai-config.mjs';
 import { createCamera, photoName } from './camera.mjs';
+import { sendPreviewStream } from './stream.mjs';
 
 const cookieName = '__Host-sony-viewer';
 const ownerName = 'Camera admin';
@@ -74,7 +75,8 @@ export async function initializeAdmin(directory, password) {
   });
 }
 
-export async function createViewer({ origin, directory, mode = 'admin', inviteOrigin = origin, camera }) {
+export async function createViewer({ origin, directory, mode = 'admin', inviteOrigin = origin, camera,
+  privateStream = false }) {
   const guest = mode === 'guest';
   const publicUrl = new URL(origin);
   if (publicUrl.protocol !== 'https:' || publicUrl.origin !== origin || !camera)
@@ -173,7 +175,17 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
       if (guest && path === '/') return send(response, 200, body.toString().replace('<body>', '<body data-guest>'), type);
       return send(response, 200, body, type);
     }
-    if (route === 'GET /session') return send(response, 200, await authenticate(request, false));
+    if (route === 'GET /session') {
+      const session = await authenticate(request, false);
+      return send(response, 200, { ...session, privateStream: !guest && privateStream });
+    }
+    if (route === 'GET /stream' && privateStream) {
+      const authorize = () => authenticate(request, true);
+      await authorize();
+      if (!await sendPreviewStream(response, camera, authorize))
+        send(response, 503, { error: 'Rust preview stream unavailable.' });
+      return;
+    }
     if (route === 'POST /ai/check') {
       await authenticate(request, true);
       await readJson(request);
@@ -235,7 +247,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       throw new Error('Configure separate admin and viewer origins and a camera key');
     const camera = createCamera({ cameraToken, port: Number(process.env.PI_CAMERA_PORT ?? 8765) });
     const options = { directory, camera };
-    const admin = await createViewer({ ...options, origin: process.env.ADMIN_ORIGIN, inviteOrigin: process.env.VIEWER_ORIGIN });
+    const admin = await createViewer({ ...options, origin: process.env.ADMIN_ORIGIN, inviteOrigin: process.env.VIEWER_ORIGIN,
+      privateStream: process.env.PRIVATE_PREVIEW_STREAM === '1' });
     const broker = await createViewer({ ...options, origin: process.env.VIEWER_ORIGIN, mode: 'guest' });
     admin.listen(join(process.env.RUNTIME_DIRECTORY, 'admin.sock'));
     const brokerPath = join(process.env.RUNTIME_DIRECTORY, 'guest.sock');

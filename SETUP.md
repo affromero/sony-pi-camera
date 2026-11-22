@@ -58,6 +58,44 @@ ssh user@hostname.local 'cat ~/.config/sony-pi-camera/camera-token'
 
 On iPhone or iPad, transfer the verified public certificate to the device and install its profile. In **Settings → General → About → Certificate Trust Settings**, enable trust for that certificate, then open the Pi's HTTPS address in Safari. [Apple’s certificate trust instructions](https://support.apple.com/en-us/102390)
 
+## Experimental Rust USB preview
+
+The optional worker holds one libgphoto2 session for preview frames. Before
+another USB command runs, the camera service stops the worker and waits for
+it to exit. The worker also releases USB after five seconds without a preview
+request. Enable it after checking your camera in PC Remote mode.
+
+On the Pi, install Rust 1.85 or later, Cargo, and `libgphoto2-dev`. From the
+checkout, build and install the worker after running the camera installer.
+
+```sh
+cargo build --locked --release --manifest-path camera/rust-preview/Cargo.toml
+sudo install -m 755 camera/rust-preview/target/release/sony-pi-preview /opt/pi-camera/sony-pi-preview
+sudo systemctl edit "sony-pi-camera@$USER.service"
+```
+
+Add this drop-in and restart the camera service.
+
+```ini
+[Service]
+Environment=PI_CAMERA_RUST_PREVIEW=/opt/pi-camera/sony-pi-preview
+```
+
+Use the journal to inspect worker errors. To return to the CLI preview,
+remove this environment setting and restart the service. The viewer keeps
+its existing refresh interval by default.
+
+For a continuous preview on the private admin page, add
+`PRIVATE_PREVIEW_STREAM=1` to `/etc/sony-pi-viewer-$USER.conf` and restart
+`sony-pi-viewer@$USER.service`. The stream uses camera JPEGs at up to 10 fps.
+Disable response buffering on the private proxy. Invited viewers retain
+the existing snapshot refresh interval.
+
+For a direct hardware measurement, stop the camera service and any other
+application using the Sony, then run `/opt/pi-camera/sony-pi-preview --probe 60`.
+It prints native JPEG dimensions, per-frame latency, and whether adjacent
+frames have identical bytes. Restart the camera service when finished.
+
 ## Shooting and reviewing photos
 
 The live view requests one JPEG at a time over USB. When you focus, change a setting, move the magnifier or take a photo, the dashboard holds the last frame and pauses the camera controls. Live view resumes when the operation finishes. Another browser attempting a camera command at the same time receives a busy message.

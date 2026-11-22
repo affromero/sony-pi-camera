@@ -73,6 +73,7 @@ if [ ! -e "$config_dir/transfer-password" ]; then
 fi
 install -d -m 755 /opt/pi-camera
 install -m 644 "$project_dir/camera.py" "$project_dir/camera.html" \
+  "$project_dir/rust_preview.py" \
   "$project_dir/schedule.py" \
   "$project_dir/camera.js" "$project_dir/camera.css" \
   "$project_dir/transfer.py" "$project_dir/scheduled_capture.py" /opt/pi-camera/
