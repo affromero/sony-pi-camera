@@ -228,7 +228,8 @@ def photo(name):
 
 def save_framed_jpeg(source: Path, target: Path, state: dict) -> None:
     with Image.open(source) as image:
-        if image.format != "JPEG":
+        # Sony may package the main JPEG and a secondary image as an MPO.
+        if image.format not in ("JPEG", "MPO"):
             raise ValueError("The camera did not deliver a JPEG.")
         width, height = image.size
         w = max(1, round(width / state["ratio"]))

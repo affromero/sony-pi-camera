@@ -208,7 +208,13 @@ class CameraTest(unittest.TestCase):
         original.paste((0, 250, 0), (208, 30, 271, 70))
         exif = Image.Exif()
         exif[274] = 6
-        original.save(self.home / "original.jpg", exif=exif)
+        original.save(
+            self.home / "original.jpg",
+            format="MPO",
+            save_all=True,
+            append_images=[Image.new("RGB", (80, 50), "blue")],
+            exif=exif,
+        )
         with self.request(
             "/api/capture", self.token, {"viewport": viewport}, self.base
         ) as response:
