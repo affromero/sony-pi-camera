@@ -171,6 +171,11 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
     if (request.method === 'POST' && (request.headers.origin !== origin ||
         request.headers['sec-fetch-site'] === 'cross-site')) return send(response, 403, { error: 'Forbidden.' });
     if (path.startsWith('/access/')) return handleAccess(request, response, path.slice(8));
+    if (route === 'GET /admin-qr.js') {
+      await authenticate(request, true);
+      const script = await readFile(new URL('admin-qr.js', import.meta.url));
+      return send(response, 200, script, 'text/javascript; charset=utf-8');
+    }
     if (request.method === 'GET' && assets.has(path)) {
       const [body, type] = assets.get(path);
       if (guest && path === '/') return send(response, 200, body.toString().replace('<body>', '<body data-guest>'), type);

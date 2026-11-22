@@ -56,6 +56,7 @@ test('serves admins and read-only invitees on the same hostname', { timeout: 800
   const post = (path, body, cookie) => call(port, path, { method: 'POST', body, cookie });
   assert.equal((await get('/photos')).status, 401);
   assert.equal((await get('/ai')).status, 401);
+  assert.equal((await get('/admin-qr.js')).status, 401);
   const owner = await post('/access/login', { password });
   assert.equal(owner.status, 200);
   assert.equal((await get('/session', owner.cookie)).data.role, 'admin');
@@ -70,6 +71,7 @@ test('serves admins and read-only invitees on the same hostname', { timeout: 800
   assert.deepEqual((await get('/photos', viewer.cookie)).data, [{ name: 'street.jpg' }]);
   assert.equal((await get('/settings', viewer.cookie)).status, 403);
   assert.equal((await get('/ai', viewer.cookie)).status, 403);
+  assert.equal((await get('/admin-qr.js', viewer.cookie)).status, 403);
   assert.equal((await post('/delete', { name: 'street.jpg' }, viewer.cookie)).status, 403);
   assert.equal((await post('/access/issue-invitation', {}, viewer.cookie)).status, 403);
 });

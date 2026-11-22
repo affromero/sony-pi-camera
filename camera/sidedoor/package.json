@@ -2,10 +2,21 @@
   "name": "sony-pi-camera-sidedoor",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
-  "scripts": { "test": "node --test ../../tests/*.test.mjs" },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test ../../tests/*.test.mjs",
+    "build": "esbuild qr.js --bundle --format=esm --minify --outfile=web/admin-qr.js"
+  },
   "dependencies": {
     "thesidedoor-core": "0.5.8",
     "thesidedoor-flock": "0.5.8"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "thesidedoor": "0.5.8"
   }
 }

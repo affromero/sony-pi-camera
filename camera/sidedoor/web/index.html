@@ -29,6 +29,11 @@
       </div>
       <section id="admin" hidden>
         <details>
+          <summary>Camera access</summary>
+          <button id="show-admin-qr" type="button">Show admin login QR code</button>
+          <div id="admin-qr" class="access-qr" role="img" aria-label="QR code for the camera admin login" hidden></div>
+        </details>
+        <details>
           <summary>Camera settings</summary>
           <div id="settings"></div>
           <button id="refresh-settings" type="button">Read settings</button>
@@ -41,6 +46,7 @@
             <button type="submit">Create single-use invitation</button>
             <label for="invite-link" hidden>Invitation link</label>
             <input id="invite-link" type="text" readonly hidden>
+            <div id="invite-qr" class="access-qr" role="img" aria-label="QR code for the single-use viewer invitation" hidden></div>
           </form>
           <div id="viewer-sessions"></div>
           <button id="refresh-sessions" type="button">Show active viewers</button>

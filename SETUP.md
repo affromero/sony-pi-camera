@@ -125,10 +125,9 @@ The live view requests one JPEG at a time over USB. When you focus, change a set
 
 The optional Sidedoor viewer has its own hostname and access rules. Use the admin password to view and download photos, change camera settings, delete Pi copies, configure AI advice, and issue viewer invitations. Each invitation works once within 24 hours. The viewer can see the live preview and download the entire Pi gallery, including future captures and uploads. A viewer session lasts 30 days on the browser that accepted it. Use **Show active viewers** to revoke one early. The private Pi dashboard and other projects keep their own access.
 
-Install Node.js 22 or newer on the Pi, with `node` on systemd's PATH. Debian's `build-essential` and `python3` supply the native build tools needed by Sidedoor. Run the camera installer, then install the pinned dependencies and create the admin in a Bash shell on the Pi. Use a strong, unique password.
+Install Node.js 22 or newer on the Pi, with `node` on systemd's PATH. On a Linux ARM64 builder, run `npm ci --prefix camera/sidedoor` and `npm run build --prefix camera/sidedoor`. Include the generated `web/admin-qr.js` and Linux ARM64 runtime dependencies in the deployment bundle. Run the camera installer, place those runtime dependencies in `/opt/pi-camera/sidedoor/node_modules`, and create the admin in a Bash shell on the Pi. Use a strong, unique password.
 
 ```sh
-sudo npm ci --prefix /opt/pi-camera/sidedoor
 viewer_state="/var/lib/sony-pi-camera-$USER"
 sudo install -d -m 700 -o "$USER" "$viewer_state"
 read -r -s -p 'Camera admin password: ' viewer_password
@@ -152,7 +151,8 @@ Route the public hostname to `unix:/run/sony-camera-public-$USER/viewer.sock` on
 
 For a separate private admin hostname, set distinct origins and route the admin hostname over LAN or VPN to `/run/sony-camera-$USER/admin.sock`. Preserve the Host header and bypass caching for either setup. The public connector needs access only to the public socket.
 
-Sign in as admin and create a link under **Viewer invitations**. Share one link per recipient.
+Sign in as admin and create a link under **Viewer invitations**. Share the link or its QR code with one recipient. The QR code under **Camera access** opens the admin login page and still requires the password.
+
 
 ## Daily photos
 
