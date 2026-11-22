@@ -224,6 +224,18 @@ class CameraTest(unittest.TestCase):
         with self.request("/api/photos/example.jpg", self.token) as response:
             self.assertEqual(response.read(), b"photo")
 
+    def test_schedule_requires_token_and_same_origin_to_write(self):
+        for token, data, origin in (
+            (None, None, None),
+            (None, {}, self.base),
+            (self.token, {}, None),
+            (self.token, {}, "https://another.example"),
+        ):
+            with self.subTest(token=bool(token), origin=origin):
+                with self.assertRaises(urllib.error.HTTPError) as error:
+                    self.request("/api/schedule", token, data, origin)
+                self.assertEqual(error.exception.code, 403)
+
     def test_preview_reports_the_camera_magnifier_viewport(self):
         with self.request("/api/preview", self.token) as response:
             self.assertEqual(response.read(), b"frame")

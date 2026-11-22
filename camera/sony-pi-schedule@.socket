@@ -1,0 +1,11 @@
+[Unit]
+Description=Private camera schedule socket for %i
+
+[Socket]
+ListenStream=/run/sony-pi-schedule-%i.sock
+SocketUser=%i
+SocketMode=0600
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

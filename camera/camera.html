@@ -15,6 +15,17 @@
 <aside>
 <h2>Camera settings</h2><p class="hint" id="mode">Reading shooting mode…</p><p class="hint">Aperture range: Sigma 35mm F1.2 DG DN Art. Update this configuration if the lens changes.</p><div id="settings"></div></aside></div>
 </fieldset>
+<details id="capture-schedule" class="library schedule">
+<summary>Scheduled captures</summary>
+<form id="schedule-form"><fieldset id="schedule-fields" disabled>
+<label><input type="checkbox" id="schedule-enabled"> Enable daily captures</label>
+<div id="schedule-times"></div>
+<button class="secondary" type="button" id="schedule-add">Add time</button>
+<label>Time zone <input id="schedule-zone" list="schedule-zones" required placeholder="America/Chicago"></label>
+<datalist id="schedule-zones"></datalist>
+<button class="secondary" type="submit">Save schedule</button>
+</fieldset></form><p role="status" id="schedule-status"></p>
+<button class="secondary" id="schedule-retry" hidden>Retry loading schedule</button></details>
 <section class="library"><h2>Photos on the Pi</h2>
 <div class="gallery-filters">
 <label>Saved from <input type="date" id="photo-from"></label>

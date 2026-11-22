@@ -1,0 +1,14 @@
+[Unit]
+Description=Camera schedule manager for %i
+Requires=sony-pi-schedule@%i.socket
+After=sony-pi-schedule@%i.socket
+
+[Service]
+ExecStart=/usr/bin/python3 -I /opt/pi-camera/schedule.py %i
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/etc/systemd/system
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+RestrictAddressFamilies=AF_UNIX

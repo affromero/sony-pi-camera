@@ -102,18 +102,11 @@ Open the public URL as admin, expand **Viewer invitations**, and create a link. 
 
 The installer provides an optional systemd timer. It starts disabled and defaults to 08:00 in the Pi's timezone. Leave the camera powered on in PC Remote mode. Each run saves a photo in the dashboard gallery using the camera's current settings and framing, including any active magnifier crop.
 
-To choose a time, run `sudo systemctl edit "sony-pi-capture@$USER.timer"` on the Pi. For example, to shoot at 08:00 Chicago time, enter the following override. The empty line after the first equals sign clears the default schedule. Add more `OnCalendar` entries for additional shots each day.
+In the private camera dashboard, open **Scheduled captures**. Choose a time and time zone, such as `08:00` and `America/Chicago`. Use **Add time** for additional shots. Select **Enable daily captures** and **Save schedule**. To pause, clear the checkbox and save. The dashboard keeps your times for later.
 
-```ini
-[Timer]
-OnCalendar=
-OnCalendar=*-*-* 08:00:00 America/Chicago
-```
-
-Enable the timer and check its next run:
+To check the next run on the Pi, use
 
 ```sh
-sudo systemctl enable --now "sony-pi-capture@$USER.timer"
 systemctl list-timers --all "sony-pi-capture@$USER.timer"
 ```
 
@@ -125,7 +118,7 @@ The timer can send one JPEG preview and the camera's current exposure and white 
 
 Sign in as admin and open **AI advice for scheduled captures**. Choose an API provider, enter a vision model with structured output, add its API key and describe the photo you want. Select **Analyze a preview before each scheduled shot** and save. Sidedoor encrypts the API key on the Pi. A blank key field keeps the selected provider's saved credential. **Check saved API key** contacts that provider without sending a camera preview.
 
-With AI enabled, a preview or provider error fails the run before the shutter fires. Clear the checkbox and save to resume ordinary scheduled captures. The schedule stays in the timer override above. Starting the service manually requests advice and takes a real photo when the advice succeeds.
+With AI enabled, a preview or provider error fails the run before the shutter fires. Clear the checkbox and save to resume ordinary scheduled captures. Edit capture times under **Scheduled captures** in the private dashboard. Starting the service manually requests advice and takes a real photo when the advice succeeds.
 
 ## Optional camera uploads over Wi-Fi
 

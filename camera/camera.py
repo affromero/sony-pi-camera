@@ -6,6 +6,7 @@ import io
 import json
 import mimetypes
 import os
+import pwd
 import secrets
 import socket
 import ssl
@@ -358,6 +359,24 @@ def capture_photo(expected: dict | None) -> list[str]:
         return [p.name for p in files]
 
 
+def schedule_request(message: dict) -> dict:
+    user = pwd.getpwuid(os.getuid()).pw_name
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+        client.settimeout(120)
+        try:
+            client.connect(f"/run/sony-pi-schedule-{user}.sock")
+        except OSError as exc:
+            raise RuntimeError(
+                "The Pi schedule service is unavailable."
+            ) from exc
+        client.sendall(json.dumps(message).encode() + b"\n")
+        with client.makefile("rb") as stream:
+            response = json.loads(stream.readline(8192))
+    if "error" in response:
+        raise RuntimeError(response["error"])
+    return response
+
+
 class Handler(BaseHTTPRequestHandler):
     def send(
         self, body, content_type="application/json", status=200, headers=None
@@ -459,6 +478,8 @@ class Handler(BaseHTTPRequestHandler):
                         "X-Magnifier-Y": str(state["y"]),
                     },
                 )
+            elif path == "/api/schedule":
+                self.send(schedule_request({"action": "read"}))
             elif path == "/api/settings":
                 with camera_read():
                     values = settings_snapshot()
@@ -546,11 +567,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            if length > 4096:
+            if not 0 <= length <= 4096:
                 raise ValueError("Request too large")
             data = json.loads(self.rfile.read(length) or b"{}")
             path = urlsplit(self.path).path
-            if path == "/api/capture":
+            if path == "/api/schedule":
+                self.send(schedule_request({"update": data}))
+            elif path == "/api/capture":
                 with camera_control():
                     files = capture_photo(data.get("viewport"))
                 self.send({"ok": True, "files": files})
