@@ -47,4 +47,4 @@ flowchart LR
     Worker -->|libgphoto2| Sony[USB camera]
 ```
 
-[Setup and operation](SETUP.md) · [USB benchmarks](SETUP.md#compare-usb-preview-backends) · [Changelog](CHANGELOG.md) · [Glossary](GLOSSARY.md) · [MIT license](LICENSE)
+[Setup and operation](SETUP.md) · [Changelog](CHANGELOG.md) · [Glossary](GLOSSARY.md) · [MIT license](LICENSE)

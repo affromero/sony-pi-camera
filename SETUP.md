@@ -62,22 +62,6 @@ share one capture loop, which starts at most ten captures per second. Disable
 response buffering on the proxy. The camera controls read the magnification
 and framing data with each preview.
 
-### Compare USB preview backends
-
-Install the `gphoto2` CLI for the benchmark. Stop the camera service and
-other camera apps, then run from the checkout.
-
-```sh
-uv run --frozen python benchmark_preview.py --worker /opt/pi-camera/sony-pi-preview --frames 60
-```
-
-Both paths fetch a native JPEG and read its viewport. The JSON reports first
-frame and subsequent latencies, native dimensions, wall-clock frame rate, and
-byte-identical neighbors alongside the installed gPhoto2 versions. It then
-measures a Rust viewport read after the preview worker releases USB, followed by the first
-Rust frame after reopening. Use a moving subject to expose repeated images.
-This comparison leaves the shutter untouched.
-
 ## Shooting and reviewing photos
 
 The live view requests one JPEG at a time over USB. When you focus, change a setting, move the magnifier or take a photo, the dashboard holds the last frame and pauses the camera controls. Live view resumes when the operation finishes. Another browser attempting a camera command at the same time receives a busy message.
