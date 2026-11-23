@@ -20,6 +20,12 @@ Keep the lens and image quality of a dedicated camera while a Raspberry Pi handl
 - **Get AI advice before a shot.** Ask a vision model to inspect a preview and suggest settings for a goal like keeping birds sharp in changing light. [Set up AI advice](SETUP.md#optional-ai-advice-before-capture)
 - **Build a computer vision pipeline.** Feed saved images from the Pi to your own script. Use an object detector to count birds at a feeder, or track how a seedling grows across a series of photos.
 
+## Architecture
+
+The Raspberry Pi controls the Sony camera over USB and stores the photos locally. The owner uses the browser dashboard to adjust settings or take a photo. Family viewers reach the live preview and gallery through a read-only HTTPS relay.
+
+Scheduled captures run on the Pi. When AI advice is enabled, the timer can send a preview to a vision model before taking the photo.
+
 ```mermaid
 flowchart LR
     Family -->|Public HTTPS| Relay[Viewer relay]
