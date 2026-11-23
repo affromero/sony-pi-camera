@@ -5,7 +5,24 @@ const inviteLink = byId('invite-link');
 const settings = byId('settings');
 const sessions = byId('viewer-sessions');
 const ai = byId('ai');
+const schedule = byId('schedule');
+const scheduleFields = byId('schedule-fields');
 let generation = 0;
+const qrCleanup = new Map();
+
+function clearQr(container) {
+  qrCleanup.get(container)?.();
+  qrCleanup.delete(container);
+  container.hidden = true;
+}
+
+async function showQr(container, value, current) {
+  const { renderQr } = await import('/admin-qr.js');
+  if (generation !== current) return;
+  clearQr(container);
+  qrCleanup.set(container, renderQr(container, value));
+  container.hidden = false;
+}
 
 export async function post(path, body = {}) {
   const response = await fetch(path, {
@@ -108,6 +125,10 @@ export function showAdmin(enabled) {
       if (current === generation) renderAi(data);
     });
   } else {
+    schedule.reset();
+    scheduleFields.disabled = true;
+    clearQr(byId('admin-qr'));
+    clearQr(byId('invite-qr'));
     ai.reset();
     byId('issue').reset();
     inviteLink.value = '';
@@ -119,6 +140,40 @@ export function showAdmin(enabled) {
 }
 
 byId('refresh-settings').onclick = () => act(loadSettings);
+function showSchedule(data) {
+  byId('schedule-enabled').checked = data.enabled;
+  byId('schedule-times').value = data.times.join(', ');
+  byId('schedule-zone').value = data.timezone;
+}
+
+byId('refresh-schedule').onclick = () => act(async (current) => {
+  const data = await get('/schedule');
+  if (generation !== current) return;
+  showSchedule(data);
+  scheduleFields.disabled = false;
+});
+
+schedule.onsubmit = (event) => {
+  event.preventDefault();
+  void act(async (current) => {
+    const body = {
+      enabled: byId('schedule-enabled').checked,
+      times: byId('schedule-times').value.split(',').map((time) => time.trim()),
+      timezone: byId('schedule-zone').value.trim(),
+    };
+    scheduleFields.disabled = true;
+    try {
+      const data = await post('/schedule', body);
+      if (generation !== current) return;
+      showSchedule(data);
+      status.textContent = 'Capture schedule saved.';
+    } finally {
+      if (generation === current) scheduleFields.disabled = false;
+    }
+  });
+};
+byId('show-admin-qr').onclick = () => act((current) =>
+  showQr(byId('admin-qr'), location.origin + '/', current));
 byId('refresh-sessions').onclick = () => act(loadSessions);
 byId('check-ai').onclick = () => act(async (current) => {
   const result = await post('/ai/check');
@@ -143,6 +198,7 @@ byId('issue').onsubmit = (event) => {
     inviteLink.hidden = inviteLink.labels[0].hidden = false;
     inviteLink.focus();
     inviteLink.select();
+    await showQr(byId('invite-qr'), inviteLink.value, current);
   });
 };
 ai.onsubmit = (event) => {

@@ -16,10 +16,11 @@ async function listen(server) {
   return server.address().port;
 }
 
-function call(port, path, { method = 'GET', body, cookie, site = origin, host = 'camera.example.test' } = {}) {
+function call(port, path, { method = 'GET', body, cookie, site = origin, host = 'camera.example.test', protocol } = {}) {
   return new Promise((resolve, reject) => {
     const payload = body === undefined ? undefined : Buffer.from(JSON.stringify(body));
     const headers = { Host: host };
+    if (protocol) headers['X-Forwarded-Proto'] = protocol;
     if (cookie) headers.Cookie = cookie;
     if (method === 'POST') Object.assign(headers, {
       Origin: site, 'Content-Type': 'application/json', 'Content-Length': payload.length,
@@ -36,6 +37,55 @@ function call(port, path, { method = 'GET', body, cookie, site = origin, host = 
     outgoing.end(payload);
   });
 }
+
+test('serves admins and read-only invitees on the same hostname', { timeout: 8000 }, async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'sony-camera-shared-'));
+  await initializeAdmin(directory, password);
+  let schedule = { enabled: false, times: ['08:00'], timezone: 'UTC' };
+  const camera = {
+    async json(path, body) {
+      if (path === '/api/schedule') {
+        if (body) schedule = body;
+        return { status: 200, data: schedule };
+      }
+      assert.equal(path, '/api/photos?details=1');
+      return { status: 200, data: [{ name: 'street.jpg' }] };
+    },
+  };
+  const server = await createViewer({ origin, directory, camera, mode: 'shared' });
+  const port = await listen(server);
+  t.after(async () => {
+    await new Promise((resolve) => server.close(resolve));
+    await rm(directory, { recursive: true, force: true });
+  });
+  const get = (path, cookie) => call(port, path, { cookie });
+  const post = (path, body, cookie) => call(port, path, { method: 'POST', body, cookie });
+  assert.equal((await get('/photos')).status, 401);
+  assert.equal((await get('/ai')).status, 401);
+  assert.equal((await get('/admin-qr.js')).status, 401);
+  const owner = await post('/access/login', { password });
+  assert.equal(owner.status, 200);
+  assert.equal((await get('/session', owner.cookie)).data.role, 'admin');
+  assert.equal((await get('/ai', owner.cookie)).status, 200);
+  assert.equal((await get('/schedule', owner.cookie)).data.enabled, false);
+  const daily = { enabled: true, times: ['08:30'], timezone: 'America/Chicago' };
+  assert.deepEqual((await post('/schedule', daily, owner.cookie)).data, daily);
+  const invitation = await post('/access/issue-invitation', {}, owner.cookie);
+  assert.equal(invitation.data.origin, origin);
+  const body = { code: invitation.data.code };
+  const viewer = await post('/access/redeem-invitation', body);
+  assert.equal(viewer.status, 200);
+  assert.equal((await post('/access/redeem-invitation', body)).status, 401);
+  assert.deepEqual((await get('/session', viewer.cookie)).data, { role: 'viewer', privateStream: false });
+  assert.deepEqual((await get('/photos', viewer.cookie)).data, [{ name: 'street.jpg' }]);
+  assert.equal((await get('/settings', viewer.cookie)).status, 403);
+  assert.equal((await get('/ai', viewer.cookie)).status, 403);
+  assert.equal((await get('/schedule', viewer.cookie)).status, 403);
+  assert.equal((await post('/schedule', { ...daily, enabled: false }, viewer.cookie)).status, 403);
+  assert.equal((await get('/admin-qr.js', viewer.cookie)).status, 403);
+  assert.equal((await post('/delete', { name: 'street.jpg' }, viewer.cookie)).status, 403);
+  assert.equal((await post('/access/issue-invitation', {}, viewer.cookie)).status, 403);
+});
 
 test('keeps viewer invitations read-only and admin AI credentials private', { timeout: 8000 }, async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'sony-camera-test-'));
@@ -81,6 +131,12 @@ test('keeps viewer invitations read-only and admin AI credentials private', { ti
   const guestGet = (path, cookie) => call(relayPort, path, { cookie });
   const guestPost = (path, body, cookie) => call(relayPort, path, { method: 'POST', body, cookie });
 
+  const redirect = await call(relayPort, '/?view=gallery', { protocol: 'http' });
+  assert.equal(redirect.status, 301);
+  assert.equal(redirect.headers.location, origin + '/?view=gallery');
+  assert.equal((await call(relayPort, '/access/login', {
+    method: 'POST', body: { password }, protocol: 'http',
+  })).status, 403);
   assert.equal((await get('/photos')).status, 401);
   assert.equal((await get('/stream')).status, 401);
   assert.equal((await call(port, '/', { host: 'wrong.example.test' })).status, 403);

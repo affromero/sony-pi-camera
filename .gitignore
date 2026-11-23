@@ -3,3 +3,4 @@ __pycache__/
 .venv/
 node_modules/
 camera/rust-preview/target/
+/camera/sidedoor/web/admin-qr.js
