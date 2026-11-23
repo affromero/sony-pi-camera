@@ -6,6 +6,7 @@
 [![Gitleaks](https://github.com/affromero/sony-pi-camera/actions/workflows/gitleaks.yml/badge.svg?branch=main)](https://github.com/affromero/sony-pi-camera/actions/workflows/gitleaks.yml)
 [![Dependabot](https://img.shields.io/badge/Dependabot-enabled-025E8C?logo=dependabot&logoColor=white)](.github/dependabot.yml)
 [![Tested camera: Sony α7 III](https://img.shields.io/badge/tested_camera-Sony_%CE%B17_III-444)](SETUP.md#connect-the-camera)
+[![Tested Pi: Raspberry Pi Zero 2 W](https://img.shields.io/badge/tested_Pi-Raspberry_Pi_Zero_2_W-444)](SETUP.md#connect-the-camera)
 
 Preview, control, and schedule photos from a USB-connected Sony camera on a Raspberry Pi. A family password or invitation opens a read-only gallery with live preview and original downloads. Optional AI advice suggests settings before a scheduled shot.
 
