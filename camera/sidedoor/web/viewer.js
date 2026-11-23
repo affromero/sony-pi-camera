@@ -31,8 +31,6 @@ let photoUrl;
 let timer;
 let imageUrl;
 let admin = false;
-let liveStream = false;
-let streamRetryAt = 0;
 let streamRequest;
 let inviteCode = new URLSearchParams(location.hash.slice(1)).get('invite');
 if (inviteCode) history.replaceState(null, '', location.pathname);
@@ -59,8 +57,6 @@ function locked() {
   if (unlock.hidden && !inviteCode && guestPage)
     status.textContent = 'Open the invitation link from the camera owner.';
   admin = false;
-  liveStream = false;
-  streamRetryAt = 0;
   showAdmin(false);
 }
 
@@ -259,35 +255,23 @@ async function refreshPreview() {
   streamRequest?.abort();
   const current = ++generation;
   if (document.hidden || camera.hidden || photoDialog.open) return;
-  const streaming = liveStream && performance.now() >= streamRetryAt;
   try {
-    if (streaming) {
-      streamRequest = new AbortController();
-      const response = await fetch('/stream', { signal: streamRequest.signal });
-      if (current !== generation) return;
-      if (response.status === 401 || response.status === 403) return locked();
-      if (!response.ok || !response.body) throw new Error();
-      for await (const frame of streamFrames(response.body)) {
-        if (current !== generation) return;
-        showFrame(frame);
-      }
-      return;
-    }
-    const response = await fetch('/preview');
+    streamRequest = new AbortController();
+    const response = await fetch('/stream', { signal: streamRequest.signal });
     if (current !== generation) return;
     if (response.status === 401 || response.status === 403) return locked();
-    if (!response.ok) throw new Error();
-    const blob = await response.blob();
-    if (current !== generation) return;
-    showFrame(blob);
+    if (!response.ok || !response.body) throw new Error();
+    for await (const frame of streamFrames(response.body)) {
+      if (current !== generation) return;
+      showFrame(frame);
+    }
   } catch {
     if (current === generation) {
-      if (streaming) streamRetryAt = performance.now() + 15000;
       previewStatus.textContent = preview.hidden ? 'Preview unavailable. Reconnecting…' : 'Showing the last frame.';
       previewStatus.hidden = false;
     }
   } finally {
-    if (current === generation) timer = setTimeout(refreshPreview, streaming ? 250 : 2500);
+    if (current === generation) timer = setTimeout(refreshPreview, 2500);
   }
 }
 
@@ -381,13 +365,12 @@ setInterval(syncGallery, 15000);
 async function enter() {
   const response = await fetch('/session');
   if (!response.ok) return locked();
-  const { role, privateStream, viewerStream } = await response.json();
+  const { role } = await response.json();
   admin = role === 'admin';
   if (admin && location.search !== '?manage=1') {
     location.replace('/controls');
     return;
   }
-  liveStream = Boolean(privateStream || viewerStream);
   camera.hidden = lock.hidden = false;
   captureButton.hidden = !admin;
   unlock.hidden = invite.hidden = true;

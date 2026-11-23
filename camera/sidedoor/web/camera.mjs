@@ -1,11 +1,13 @@
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 
-export function createCamera({ port, cameraToken, previewInterval = 2000 }) {
+export function createCamera({ port, cameraToken }) {
   const upstream = `http://127.0.0.1:${port}`;
   let frame;
   let pendingFrame;
   let refreshedAt = -Infinity;
+  let nextCapture = 0;
   let downloads = 0;
 
   function request(path, signal, body) {
@@ -21,26 +23,24 @@ export function createCamera({ port, cameraToken, previewInterval = 2000 }) {
     });
   }
 
-  async function preview(nativeOnly = false) {
-    const interval = nativeOnly && frame?.native !== false ? 100 : previewInterval;
-    if (!pendingFrame && performance.now() - refreshedAt >= interval) {
-      pendingFrame = refresh();
-    }
-    const latest = pendingFrame ? await pendingFrame : frame;
-    return latest && (!nativeOnly || latest.native) ? latest.jpeg : null;
+  async function preview(previous) {
+    if (frame && frame !== previous && performance.now() - refreshedAt < 500) return frame;
+    pendingFrame ??= refresh();
+    return pendingFrame;
   }
 
   async function refresh() {
+    const wait = nextCapture - performance.now();
+    if (wait > 0) await delay(wait);
+    nextCapture = performance.now() + 100;
     try {
       const result = await request('/api/preview', AbortSignal.timeout(20000));
-      if (!result.ok || result.headers.get('content-type') !== 'image/jpeg') {
+      if (!result.ok || result.headers.get('content-type') !== 'image/jpeg' ||
+          result.headers.get('x-preview-backend') !== 'rust') {
         await result.body?.cancel();
         frame = null;
       } else {
-        frame = {
-          jpeg: Buffer.from(await result.arrayBuffer()),
-          native: result.headers.get('x-preview-backend') === 'rust',
-        };
+        frame = Buffer.from(await result.arrayBuffer());
       }
       return frame;
     } catch {
@@ -48,6 +48,7 @@ export function createCamera({ port, cameraToken, previewInterval = 2000 }) {
       return null;
     } finally {
       refreshedAt = performance.now();
+      if (!frame) nextCapture = refreshedAt + 250;
       pendingFrame = undefined;
     }
   }

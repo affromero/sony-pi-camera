@@ -64,13 +64,10 @@ operation through libgphoto2. Preview reuses a USB session and releases it
 after five idle seconds or before settings, focus or capture opens its own
 session. Use the service journal to inspect USB errors.
 
-For a continuous preview on the private admin page, add
-`PRIVATE_PREVIEW_STREAM=1` to `/etc/sony-pi-viewer-$USER.conf` and restart
-`sony-pi-viewer@$USER.service`. The stream uses camera JPEGs at up to 10 fps.
-Disable response buffering on the private proxy. Set `VIEWER_PREVIEW_STREAM=1`
-in the same file and restart the viewer to stream to family and invited viewers.
-Up to three sessions share the preview stream. The viewer uses snapshots if the
-stream is unavailable.
+The live viewer streams Rust camera JPEGs by default. Up to three viewers
+share one capture loop, which starts at most ten captures per second. Disable
+response buffering on the proxy. The camera controls read the magnification
+and framing data with each preview.
 
 ### Compare USB preview backends
 

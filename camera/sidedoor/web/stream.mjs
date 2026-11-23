@@ -10,7 +10,7 @@ export async function sendPreviewStream(response, camera, authorize) {
   try {
     while (!stream.signal.aborted && performance.now() < expiresAt) {
       const frame = response.writableNeedDrain ? null : await Promise.race([
-        camera.preview(true),
+        camera.preview(previous),
         delay(Math.max(0, Math.min(checkAt, expiresAt) - performance.now()), null,
           { signal: stream.signal }),
       ]);
@@ -31,8 +31,9 @@ export async function sendPreviewStream(response, camera, authorize) {
         response.write('\r\n');
         previous = frame;
         expiresAt = performance.now() + 15000;
+      } else {
+        await delay(50, undefined, { signal: stream.signal });
       }
-      await delay(100, undefined, { signal: stream.signal });
     }
     if (!previous && !stream.signal.aborted) return false;
     if (!stream.signal.aborted) response.destroy();

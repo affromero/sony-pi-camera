@@ -89,7 +89,7 @@ test('serves admins and read-only invitees on the same hostname', { timeout: 800
   const viewer = await post('/access/redeem-invitation', body);
   assert.equal(viewer.status, 200);
   assert.equal((await post('/access/redeem-invitation', body)).status, 401);
-  assert.deepEqual((await get('/session', viewer.cookie)).data, { role: 'viewer', privateStream: false });
+  assert.deepEqual((await get('/session', viewer.cookie)).data, { role: 'viewer' });
   assert.deepEqual((await get('/photos', viewer.cookie)).data, [{ name: 'street.jpg' }]);
   assert.equal((await get('/settings', viewer.cookie)).status, 403);
   assert.equal((await get('/ai', viewer.cookie)).status, 403);
@@ -110,13 +110,13 @@ test('streams the preview to authorized family viewers and limits concurrent str
   await initializeAdmin(directory, password);
   const familyPassword = 'separate-family-password';
   await initializeFamily(directory, familyPassword);
-  const camera = { async preview() { return Buffer.from([0xff, 0xd8, 0xff, 0xd9]); } };
-  const viewer = await createViewer({ origin, directory, camera, mode: 'guest', viewerStream: true });
+  const frame = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+  const camera = { async preview() { return frame; } };
+  const viewer = await createViewer({ origin, directory, camera, mode: 'guest' });
   t.after(() => viewer.close());
   const port = await listen(viewer);
   assert.equal((await call(port, '/stream')).status, 401);
   const family = await call(port, '/access/family-login', { method: 'POST', body: { password: familyPassword } });
-  assert.equal((await call(port, '/session', { cookie: family.cookie })).data.viewerStream, true);
   const streams = [];
   t.after(() => streams.forEach((stream) => stream.destroy()));
   for (let i = 0; i < 3; i++) {
@@ -174,7 +174,7 @@ test('keeps viewer invitations read-only and admin AI credentials private', { ti
   await initializeAdmin(directory, password);
   const privatePort = await listen(upstream);
   const camera = createCamera({ port: privatePort, cameraToken: 'camera-key' });
-  const server = await createViewer({ origin, directory, camera, privateStream: true });
+  const server = await createViewer({ origin, directory, camera });
   const broker = await createViewer({ origin, directory, camera, mode: 'guest' });
   const socket = join(directory, 'guest.sock');
   await new Promise((resolve) => broker.listen(socket, resolve));
@@ -237,7 +237,14 @@ test('keeps viewer invitations read-only and admin AI credentials private', { ti
   assert.equal(original.data.toString(), 'original jpeg');
   assert.equal((await guestGet('/photo/unsafe.svg', guest)).status, 415);
   assert.equal((await guestGet('/photo/%2e%2e%2Ffile', guest)).status, 404);
-  assert.equal((await guestGet('/stream', guest)).status, 404);
+  const guestStream = await new Promise((resolve, reject) => {
+    const outgoing = request({ host: '127.0.0.1', port: relayPort, path: '/stream',
+      headers: { Host: 'camera.example.test', Cookie: guest } }, resolve);
+    outgoing.on('error', reject);
+    outgoing.end();
+  });
+  assert.equal(guestStream.statusCode, 200);
+  guestStream.destroy();
   assert.equal((await guestGet('/session', owner.cookie)).status, 403);
   assert.equal((await guestPost('/access/logout', {}, owner.cookie)).status, 403);
   assert.equal((await guestPost('/access/login', { password })).status, 404);
@@ -258,8 +265,12 @@ test('keeps viewer invitations read-only and admin AI credentials private', { ti
   assert.equal((await post('/access/issue-invitation', {}, guest)).status, 403);
   assert.equal((await get('/api/advice-input', owner.cookie)).status, 404);
   assert.equal((await post('/access/configure-household', { password }, owner.cookie)).status, 404);
-  const previews = await Promise.all([guestGet('/preview', guest), get('/preview', owner.cookie)]);
-  assert.ok(previews.every(({ status, data }) => status === 200 && data.toString() === 'jpeg'));
+  assert.equal((await guestGet('/preview', guest)).status, 404);
+  const firstFrame = await camera.preview();
+  previewCalls = 0;
+  const previews = await Promise.all([camera.preview(firstFrame), camera.preview(firstFrame)]);
+  assert.equal(previews[0].toString(), 'jpeg');
+  assert.equal(previews[0], previews[1]);
   assert.equal(previewCalls, 1);
 
   const configured = await post('/ai', {

@@ -18,7 +18,7 @@ const sidedoor = document.body.hasAttribute('data-sidedoor');
 let token = sidedoor ? '' : location.hash.slice(1) || sessionStorage.getItem('camera-token');
 const connected = () => sidedoor || Boolean(token);
 if (!sidedoor && location.hash) { sessionStorage.setItem('camera-token', token); history.replaceState(null, '', '/'); }
-const frameInterval = sidedoor ? 350 : 50;
+const frameInterval = sidedoor ? 100 : 50;
 let operation = '';
 let externalBusy = false;
 let pendingPreview = null;

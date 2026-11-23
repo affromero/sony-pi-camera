@@ -111,8 +111,7 @@ export async function initializeFamily(directory, password) {
   });
 }
 
-export async function createViewer({ origin, directory, mode = 'admin', inviteOrigin = origin, camera,
-  privateStream = false, viewerStream = false }) {
+export async function createViewer({ origin, directory, mode = 'admin', inviteOrigin = origin, camera }) {
   const guest = mode === 'guest';
   const shared = mode === 'shared';
   const publicUrl = new URL(origin);
@@ -222,8 +221,7 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
     const route = request.method + ' ' + path;
     const photoRoute = request.method === 'GET' && /^\/(thumbnail|photo|download)\/([^/?]+)$/.exec(path);
     if (guest && !(request.method === 'GET' && (
-      ['/', '/viewer.css', '/viewer.js', '/admin.js', '/session', '/photos', '/preview'].includes(path) ||
-      (viewerStream && path === '/stream') ||
+      ['/', '/viewer.css', '/viewer.js', '/admin.js', '/session', '/photos', '/stream'].includes(path) ||
       photoRoute
     )) && !(request.method === 'POST' && ['/access/redeem-invitation', '/access/family-login', '/access/logout'].includes(path)))
       return send(response, 404, { error: 'Not found.' });
@@ -265,14 +263,10 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
       return;
     }
     if (route === 'GET /session') {
-      const session = await authenticate(request, false);
-      return send(response, 200, {
-        ...session, privateStream: session.role === 'admin' && privateStream,
-        ...(viewerStream ? { viewerStream: true } : {}),
-      });
+      return send(response, 200, await authenticate(request, false));
     }
-    if (route === 'GET /stream' && (privateStream || viewerStream)) {
-      const authorize = () => authenticate(request, !viewerStream);
+    if (route === 'GET /stream') {
+      const authorize = () => authenticate(request, false);
       await authorize();
       const count = activeStreams.get(camera) ?? 0;
       if (count >= 3) return send(response, 429, { error: 'Camera streams are busy.' });
@@ -306,11 +300,6 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
         return send(response, 400, { error: 'Invalid setting.' });
       const result = await camera.json(cameraRoutes.get(route), body);
       return send(response, result.status, result.data);
-    }
-    if (route === 'GET /preview') {
-      await authenticate(request, false);
-      const frame = await camera.preview();
-      return frame ? send(response, 200, frame, 'image/jpeg') : send(response, 503, { error: 'Preview unavailable.' });
     }
     if (photoRoute) {
       await authenticate(request, false);
@@ -356,12 +345,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const viewerOrigin = process.env.VIEWER_ORIGIN;
     const shared = adminOrigin === viewerOrigin;
     if (!shared) {
-      const admin = await createViewer({ ...options, origin: adminOrigin, inviteOrigin: viewerOrigin,
-        privateStream: process.env.PRIVATE_PREVIEW_STREAM === '1' });
+      const admin = await createViewer({ ...options, origin: adminOrigin, inviteOrigin: viewerOrigin });
       admin.listen(join(process.env.RUNTIME_DIRECTORY, 'admin.sock'));
     }
-    const broker = await createViewer({ ...options, origin: viewerOrigin, mode: shared ? 'shared' : 'guest',
-      viewerStream: process.env.VIEWER_PREVIEW_STREAM === '1' });
+    const broker = await createViewer({ ...options, origin: viewerOrigin, mode: shared ? 'shared' : 'guest' });
     const brokerPath = join(process.env.RUNTIME_DIRECTORY, 'guest.sock');
     broker.listen(brokerPath, async () => { await chmod(brokerPath, 0o660); });
   }
