@@ -8,6 +8,14 @@ Preview, control, and schedule photos from a USB-connected Sony camera on a Rasp
 
 Example setup for watching a backyard bird feeder and sharing photos with family. The scene and settings are simulated.
 
+## Why use this?
+
+Keep the lens and image quality of a dedicated camera while a Raspberry Pi handles capture, storage, and remote access.
+
+- **Make a timelapse.** Schedule photos of a growing plant, a backyard feeder, or a workshop project. Assemble the saved frames into a video.
+- **Get AI advice before a shot.** Ask a vision model to inspect a preview and suggest settings for a goal like keeping birds sharp in changing light. [Set up AI advice](SETUP.md#optional-ai-advice-before-capture)
+- **Build a computer vision pipeline.** Feed saved images from the Pi to your own script. Use an object detector to count birds at a feeder, or track how a seedling grows across a series of photos.
+
 ```mermaid
 flowchart LR
     Family -->|Public HTTPS| Relay[Viewer relay]
