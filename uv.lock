@@ -507,7 +507,7 @@ wheels = [
 
 [[package]]
 name = "sony-pi-camera"
-version = "0.0.0"
+version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "pillow" },
