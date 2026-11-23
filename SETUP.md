@@ -1,12 +1,5 @@
 # Sony Pi Camera
 
-[![Checks on main](https://github.com/affromero/sony-pi-camera/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/affromero/sony-pi-camera/actions/workflows/checks.yml)
-[![CodeQL](https://github.com/affromero/sony-pi-camera/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/affromero/sony-pi-camera/actions/workflows/codeql.yml)
-[![Dead code](https://github.com/affromero/sony-pi-camera/actions/workflows/dead-code.yml/badge.svg?branch=main)](https://github.com/affromero/sony-pi-camera/actions/workflows/dead-code.yml)
-[![Gitleaks](https://github.com/affromero/sony-pi-camera/actions/workflows/gitleaks.yml/badge.svg?branch=main)](https://github.com/affromero/sony-pi-camera/actions/workflows/gitleaks.yml)
-[![Dependabot](https://img.shields.io/badge/Dependabot-enabled-025E8C?logo=dependabot&logoColor=white)](.github/dependabot.yml)
-[![Tested camera: Sony α7 III](https://img.shields.io/badge/tested_camera-Sony_%CE%B17_III-444)](#connect-the-camera)
-
 Control a USB-connected Sony α7 III from a browser on your local network. A Raspberry Pi serves the live preview, camera controls and photo gallery. This setup has been tested with an α7 III running firmware 4.04, a Sigma 35mm F1.2 DG DN Art and a Raspberry Pi Zero 2 W.
 
 ## Why this exists

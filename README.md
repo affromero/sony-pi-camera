@@ -1,5 +1,12 @@
 # Sony Pi Camera
 
+[![Checks on main](https://github.com/affromero/sony-pi-camera/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/affromero/sony-pi-camera/actions/workflows/checks.yml)
+[![CodeQL](https://github.com/affromero/sony-pi-camera/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/affromero/sony-pi-camera/actions/workflows/codeql.yml)
+[![Dead code](https://github.com/affromero/sony-pi-camera/actions/workflows/dead-code.yml/badge.svg?branch=main)](https://github.com/affromero/sony-pi-camera/actions/workflows/dead-code.yml)
+[![Gitleaks](https://github.com/affromero/sony-pi-camera/actions/workflows/gitleaks.yml/badge.svg?branch=main)](https://github.com/affromero/sony-pi-camera/actions/workflows/gitleaks.yml)
+[![Dependabot](https://img.shields.io/badge/Dependabot-enabled-025E8C?logo=dependabot&logoColor=white)](.github/dependabot.yml)
+[![Tested camera: Sony α7 III](https://img.shields.io/badge/tested_camera-Sony_%CE%B17_III-444)](SETUP.md#connect-the-camera)
+
 Preview, control, and schedule photos from a USB-connected Sony camera on a Raspberry Pi. A family password or invitation opens a read-only gallery with live preview and original downloads. Optional AI advice suggests settings before a scheduled shot.
 
 The admin takes a photo from the live preview. It appears below under **Photos on the Pi**.
