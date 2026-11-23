@@ -19,6 +19,7 @@ ftps = [
 dev = [
     "pre-commit>=4,<5",
     "ruff==0.17.5",
+    "ty==0.0.108",
 ]
 
 [tool.uv]

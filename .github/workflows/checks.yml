@@ -29,23 +29,22 @@ jobs:
         run: |
           uv lock --check
           uv sync --frozen --extra ftps
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+      - name: Install JavaScript dependencies
+        run: npm ci --prefix camera/sidedoor
+      - name: Install Rust lint components
+        run: rustup component add rustfmt clippy
       - name: Run repository hooks
         run: uv run --frozen --extra ftps pre-commit run --all-files --show-diff-on-failure
       - name: Audit locked dependencies
         if: matrix.python == '3.11'
         run: uv audit --locked
-      - name: Check dashboard JavaScript
-        run: node --check camera/camera.js
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        if: matrix.python == '3.13'
-        with:
-          node-version: "22"
       - name: Test scheduled AI advice
         if: matrix.python == '3.13'
         working-directory: camera/sidedoor
-        run: |
-          npm ci
-          npm test
+        run: npm test
       - name: Run camera service tests
         run: uv run --frozen --extra ftps python -m unittest discover -s tests -v
       - name: Build and test the Rust camera backend
@@ -53,7 +52,6 @@ jobs:
         working-directory: camera/rust-preview
         run: |
           sudo apt-get install --yes libgphoto2-dev
-          cargo fmt --check
           cargo test --locked
           cargo build --locked --release
       - name: Import optional FTPS receiver

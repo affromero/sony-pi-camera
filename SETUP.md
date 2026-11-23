@@ -174,15 +174,13 @@ The Pi can serve its library while the camera is disconnected. Capturing and liv
 
 ## Development
 
-Use uv, Node.js and ShellCheck. On macOS, install them with `brew install uv node shellcheck`. On Debian, install `nodejs` and `shellcheck` with apt and install uv using its [installation guide](https://docs.astral.sh/uv/getting-started/installation/). From the checkout, create a development environment and run the checks.
+On your development machine, install Git, uv, Node.js 22.13+ (22.x) or 24+, npm, ShellCheck, and Rust with Cargo. The setup script installs the locked Python and JavaScript dependencies and registers the Git hooks. It also installs rustfmt and Clippy if Rust is managed by rustup.
 
 ```sh
-uv sync --frozen --python 3.13
-uv run --frozen pre-commit install --install-hooks
+./scripts/setup.sh
 uv run --frozen pre-commit run --all-files
 uv run --frozen python -m unittest discover -s tests -v
-node --check camera/camera.js
-(cd camera/sidedoor && npm ci && npm test)
+npm test --prefix camera/sidedoor
 ```
 
 The dashboard uses Pillow for cropped JPEGs and `exiftool` for thumbnails. The Pi installer runs services under the OS Python. For local receiver development, `uv sync --frozen --extra ftps` installs pyftpdlib and pyOpenSSL. Update dependencies in `pyproject.toml`, run `uv lock` and commit the updated lockfile.

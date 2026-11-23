@@ -1,15 +1,13 @@
 """Exercise the settings a camera operator can read and save."""
 
-import importlib.util
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
+from camera import schedule
+
 ROOT = Path(__file__).resolve().parents[1] / "camera"
-spec = importlib.util.spec_from_file_location("schedule", ROOT / "schedule.py")
-schedule = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(schedule)
 UNIT = "sony-pi-capture@operator.timer"
 
 

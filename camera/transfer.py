@@ -15,6 +15,7 @@ PHOTOS = Path.home() / "camera-photos"
 
 
 class CameraTransfer(TLS_FTPHandler):
+    allowed_ip: str
     tls_control_required = True
     tls_data_required = True
     passive_ports = range(30000, 30011)
@@ -52,7 +53,11 @@ if __name__ == "__main__":
     )
     authorizer.add_user("camera", password, str(PHOTOS), perm="elmw")
     CameraTransfer.authorizer = authorizer
-    server = FTPServer(("0.0.0.0", 2121), CameraTransfer)
+    # pyftpdlib handles connections through Acceptor, which never calls
+    # the abstract async_chat data callbacks in the Python 3.11 stubs.
+    server = FTPServer(  # ty: ignore[abstract-class-instantiation]
+        ("0.0.0.0", 2121), CameraTransfer
+    )
     server.max_cons = 8
     server.max_cons_per_ip = 4
     server.serve_forever()

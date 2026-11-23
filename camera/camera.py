@@ -16,16 +16,17 @@ import subprocess
 import tempfile
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from fractions import Fraction
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
 from urllib.parse import unquote, urlsplit
 
 from PIL import Image, ImageOps
 
-if __package__:
+if TYPE_CHECKING or __package__:
     from camera.rust_preview import RustPreview
 else:
     from rust_preview import RustPreview
@@ -57,7 +58,7 @@ class CameraBusy(Exception):
 
 
 @contextmanager
-def camera_read() -> Iterator[None]:
+def camera_read() -> Generator[None, None, None]:
     if CONTROL.locked() or not LOCK.acquire(blocking=False):
         raise CameraBusy("Camera busy. Waiting for the current operation.")
     try:
@@ -67,7 +68,7 @@ def camera_read() -> Iterator[None]:
 
 
 @contextmanager
-def camera_control() -> Iterator[None]:
+def camera_control() -> Generator[None, None, None]:
     if not CONTROL.acquire(blocking=False):
         raise CameraBusy("Camera busy. Finish the current operation first.")
     try:
@@ -443,7 +444,23 @@ def schedule_request(message: dict) -> dict:
     return response
 
 
+class CameraHTTPServer(ThreadingHTTPServer):
+    def __init__(
+        self,
+        address: tuple[str, int],
+        allowed_hosts: tuple[str, ...],
+        scheme: str,
+    ) -> None:
+        self.allowed_hosts = allowed_hosts
+        self.scheme = scheme
+        super().__init__(address, Handler)
+
+
 class Handler(BaseHTTPRequestHandler):
+    @property
+    def camera_server(self) -> CameraHTTPServer:
+        return cast(CameraHTTPServer, self.server)
+
     def send(
         self, body, content_type="application/json", status=200, headers=None
     ):
@@ -475,10 +492,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def authorized(self):
         host = self.headers.get("Host", "")
-        if host not in self.server.allowed_hosts:
+        if host not in self.camera_server.allowed_hosts:
             return False
         origin = self.headers.get("Origin")
-        if origin and origin != f"{self.server.scheme}://{host}":
+        if origin and origin != f"{self.camera_server.scheme}://{host}":
             return False
         return secrets.compare_digest(
             self.headers.get("X-Camera-Token", ""), TOKEN
@@ -487,7 +504,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urlsplit(self.path).path
         if path in ("/", "/camera.js", "/camera.css"):
-            if self.headers.get("Host", "") not in self.server.allowed_hosts:
+            if (
+                self.headers.get("Host", "")
+                not in self.camera_server.allowed_hosts
+            ):
                 self.send(b"Forbidden", "text/plain", 403)
                 return
             name = "camera.html" if path == "/" else path[1:]
@@ -499,7 +519,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send({"error": "Unauthorized"}, status=403)
             return
         advice = path == "/api/advice-input"
-        if advice and self.server.scheme != "http":
+        if advice and self.camera_server.scheme != "http":
             self.send({"error": "Not found"}, status=404)
             return
         try:
@@ -593,7 +613,7 @@ class Handler(BaseHTTPRequestHandler):
         if (
             not self.authorized()
             or self.headers.get("Origin")
-            != f"{self.server.scheme}://{self.headers.get('Host')}"
+            != f"{self.camera_server.scheme}://{self.headers.get('Host')}"
         ):
             self.send({"error": "Unauthorized"}, status=403)
             return
@@ -672,9 +692,11 @@ if __name__ == "__main__":
         with os.fdopen(descriptor, "w") as stream:
             stream.write(secrets.token_urlsafe(32))
     TOKEN = TOKEN_FILE.read_text().strip()
-    local = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    local.allowed_hosts = (f"localhost:{PORT}", f"127.0.0.1:{PORT}")
-    local.scheme = "http"
+    local = CameraHTTPServer(
+        ("127.0.0.1", PORT),
+        (f"localhost:{PORT}", f"127.0.0.1:{PORT}"),
+        "http",
+    )
     cert = TOKEN_FILE.parent / "camera.crt"
     key = TOKEN_FILE.parent / "camera.key"
     if os.environ.get("PI_CAMERA_REQUIRE_TLS") == "1" and not (
@@ -682,9 +704,11 @@ if __name__ == "__main__":
     ):
         raise RuntimeError("Camera TLS certificate or key is missing")
     if cert.exists() and key.exists():
-        lan = ThreadingHTTPServer(("0.0.0.0", LAN_PORT), Handler)
-        lan.allowed_hosts = (f"{socket.gethostname()}.local:{LAN_PORT}",)
-        lan.scheme = "https"
+        lan = CameraHTTPServer(
+            ("0.0.0.0", LAN_PORT),
+            (f"{socket.gethostname()}.local:{LAN_PORT}",),
+            "https",
+        )
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.minimum_version = ssl.TLSVersion.TLSv1_2
         context.load_cert_chain(cert, key)

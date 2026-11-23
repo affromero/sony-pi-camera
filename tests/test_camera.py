@@ -387,7 +387,9 @@ class CameraTest(unittest.TestCase):
             with self.request(prefix + name, self.token) as response:
                 with Image.open(io.BytesIO(response.read())) as saved:
                     self.assertEqual(saved.size, (34, 54))
-                    r, g, b = saved.getpixel((0, 0))
+                    pixel = saved.getpixel((0, 0))
+                    assert isinstance(pixel, tuple)
+                    r, g, b = pixel
                     self.assertGreater(g, max(r, b) + 150)
 
     def test_thumbnail_resizes_an_ordinary_jpeg_and_applies_orientation(self):

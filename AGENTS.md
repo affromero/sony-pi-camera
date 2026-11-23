@@ -9,9 +9,7 @@ Read the architecture and hardware notes in [README.md](README.md). The tested c
 - `camera/camera.js`, `camera/camera.html` and `camera/camera.css` implement the browser controls. The magnifier overview uses the last full frame and the viewport reported by the body.
 - `camera/transfer.py` handles optional FTPS uploads. Both services use `~/camera-photos`. The gallery's Delete action removes the Pi copy.
 - Keep access keys, passwords, camera photos and generated private keys out of Git, examples and logs. Preserve the dashboard's token, host and origin checks.
-- Use `uv sync --frozen` for development and `uv run --frozen python` for
-  manual Python commands. Install hooks with
-  `uv run --frozen pre-commit install --install-hooks` in the main checkout.
-  Run the hooks, camera tests and JavaScript syntax check before handing
-  over changes. The setup guide lists the commands.
+- Run `./scripts/setup.sh` to install development dependencies and Git hooks.
+  Use `uv run --frozen python` for manual Python commands. Run the hooks and
+  camera tests before handing over changes. The setup guide lists the commands.
 - Mock the USB boundary in automated tests. Verify behavior on hardware when possible and identify anything checked only with a mock. Update the README and [glossary](GLOSSARY.md) when a feature changes setup or terminology.

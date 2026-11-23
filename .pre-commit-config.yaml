@@ -21,6 +21,31 @@ repos:
       - id: ruff-format
   - repo: local
     hooks:
+      - id: ty
+        name: Python type check (ty)
+        entry: uv run --frozen --extra ftps ty check --python-version 3.11 --error-on-warning
+        language: system
+        files: '(\.(py|pyi)$|^(pyproject\.toml|uv\.lock)$)'
+        pass_filenames: false
+      - id: eslint
+        name: JavaScript lint (ESLint)
+        entry: camera/sidedoor/node_modules/.bin/eslint --config camera/sidedoor/eslint.config.mjs --max-warnings 0 camera tests
+        language: system
+        files: '^(?:(camera|tests)/.*\.(js|mjs)|camera/sidedoor/package(-lock)?\.json)$'
+        exclude: '^camera/sidedoor/web/admin-qr\.js$'
+        pass_filenames: false
+      - id: rustfmt
+        name: Rust formatting (rustfmt)
+        entry: cargo fmt --manifest-path camera/rust-preview/Cargo.toml --all -- --check
+        language: system
+        files: '^camera/rust-preview/.*(\.rs|Cargo\.toml|Cargo\.lock)$'
+        pass_filenames: false
+      - id: clippy
+        name: Rust lint (Clippy)
+        entry: cargo clippy --manifest-path camera/rust-preview/Cargo.toml --locked --all-targets -- -D warnings
+        language: system
+        files: '^camera/rust-preview/.*(\.rs|Cargo\.toml|Cargo\.lock)$'
+        pass_filenames: false
       - id: shellcheck
         name: ShellCheck
         entry: shellcheck
