@@ -106,7 +106,11 @@ Sign in as admin and create a link under **Viewer invitations**. Share the link 
 
 After admin sign-in, the shared site opens the same camera controls used on the Pi. Use the menu at the top right to manage invitations and AI advice.
 
-Under **Viewer invitations**, choose **Disconnect all viewers** to sign out current family and invitation sessions and stop their live previews. Family members can sign in again with their password, and unused invitations still work. Your preview pauses while the administration menu is open. The camera's own power-save settings determine when its display sleeps. [Sony power-save guide](https://helpguide.sony.net/ilc/1720/v1/en/contents/TP0001653176.html)
+Under **Viewer invitations**, choose **Disconnect all viewers** to sign out current family and invitation sessions and stop their live previews. Family members can sign in again with their password, and unused invitations still work. Your preview pauses while the administration menu is open.
+
+The viewer stops streaming when its tab is hidden or after 15 seconds without input. Returning to the tab, moving the pointer, tapping, or pressing a key wakes the preview. Change the timeout under **Preview sleep** in the admin menu. Other viewers pick up the new timeout the next time they open the viewer.
+
+The rear LCD is controlled on the camera. Enable **Monitor Off** under **Camera Settings2 → DISP Button → Monitor**, then use the camera's DISP button to switch display modes. The α7 III can suspend automatic power save while connected to a computer. [Sony finder and monitor settings](https://helpguide.sony.net/ilc/1720/v1/en/contents/TP0001629732.html) · [Sony power-save guide](https://helpguide.sony.net/ilc/1720/v1/en/contents/TP0001653176.html)
 
 To add a reusable family password, run the viewer's `setup-family` command with the same state directory as the admin setup and supply a separate password on stdin. Restart the viewer afterward. **Open as family** gives access to the live preview and gallery.
 

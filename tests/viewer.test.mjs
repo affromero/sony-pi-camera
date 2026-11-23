@@ -89,7 +89,13 @@ test('serves admins and read-only invitees on the same hostname', { timeout: 800
   const viewer = await post('/access/redeem-invitation', body);
   assert.equal(viewer.status, 200);
   assert.equal((await post('/access/redeem-invitation', body)).status, 401);
-  assert.deepEqual((await get('/session', viewer.cookie)).data, { role: 'viewer' });
+  assert.deepEqual((await get('/session', viewer.cookie)).data, { role: 'viewer', idleSeconds: 15 });
+  assert.equal((await post('/preview-settings', { idleSeconds: 30 }, viewer.cookie)).status, 403);
+  for (const idleSeconds of [4, 301, 15.5, '15']) {
+    assert.equal((await post('/preview-settings', { idleSeconds }, owner.cookie)).status, 400);
+  }
+  assert.deepEqual((await post('/preview-settings', { idleSeconds: 30 }, owner.cookie)).data, { idleSeconds: 30 });
+  assert.equal((await get('/session', viewer.cookie)).data.idleSeconds, 30);
   assert.deepEqual((await get('/photos', viewer.cookie)).data, [{ name: 'street.jpg' }]);
   assert.equal((await get('/settings', viewer.cookie)).status, 403);
   assert.equal((await get('/ai', viewer.cookie)).status, 403);

@@ -25,27 +25,48 @@ adminButton.hidden = guestPage;
 familyButton.hidden = !familyLogin;
 if (familyLogin) byId('password-label').textContent = 'Camera password';
 let generation = 0;
+let previewGeneration = 0;
 let galleryRequest = 0;
 let gallerySnapshot = '';
 let photoRequest;
 let photoUrl;
 let timer;
+let idleTimer;
+let idleSeconds = 15;
+let lastActivity = 0;
+let sleeping = false;
 let imageUrl;
 let admin = false;
 let streamRequest;
 let inviteCode = new URLSearchParams(location.hash.slice(1)).get('invite');
 if (inviteCode) history.replaceState(null, '', location.pathname);
 
-function locked() {
-  generation++;
-  galleryRequest++;
-  gallerySnapshot = '';
+function stopPreview() {
+  previewGeneration++;
   clearTimeout(timer);
   streamRequest?.abort();
+}
+
+function clearFrame() {
   if (imageUrl) URL.revokeObjectURL(imageUrl);
   imageUrl = undefined;
   preview.removeAttribute('src');
   preview.hidden = true;
+}
+
+function stopIdleTimer() {
+  clearTimeout(idleTimer);
+  idleTimer = undefined;
+}
+
+function locked() {
+  generation++;
+  galleryRequest++;
+  gallerySnapshot = '';
+  stopPreview();
+  stopIdleTimer();
+  sleeping = false;
+  clearFrame();
   previewStatus.hidden = false;
   previewStatus.textContent = 'Waiting for the camera…';
   photos.replaceChildren();
@@ -252,33 +273,71 @@ async function* streamFrames(body) {
 }
 
 async function refreshPreview() {
-  clearTimeout(timer);
-  streamRequest?.abort();
-  const current = ++generation;
+  stopPreview();
+  const current = previewGeneration;
   if (document.hidden || camera.hidden || photoDialog.open) return;
   if (admin && adminMenu.matches(':popover-open')) {
     previewStatus.textContent = 'Preview paused while administration is open.';
     previewStatus.hidden = false;
     return;
   }
+  if (sleeping) {
+    clearFrame();
+    previewStatus.textContent = 'Sleep mode. Move the pointer, tap, or press a key to wake the preview.';
+    previewStatus.hidden = false;
+    return;
+  }
   try {
     streamRequest = new AbortController();
     const response = await fetch('/stream', { signal: streamRequest.signal });
-    if (current !== generation) return;
+    if (current !== previewGeneration) return;
     if (response.status === 401 || response.status === 403) return locked();
     if (!response.ok || !response.body) throw new Error();
     for await (const frame of streamFrames(response.body)) {
-      if (current !== generation) return;
+      if (current !== previewGeneration) return;
       showFrame(frame);
     }
   } catch {
-    if (current === generation) {
+    if (current === previewGeneration) {
       previewStatus.textContent = preview.hidden ? 'Preview unavailable. Reconnecting…' : 'Showing the last frame.';
       previewStatus.hidden = false;
     }
   } finally {
-    if (current === generation) timer = setTimeout(refreshPreview, 2500);
+    if (current === previewGeneration) timer = setTimeout(refreshPreview, 2500);
   }
+}
+
+function scheduleIdle() {
+  const remaining = idleSeconds * 1000 - (performance.now() - lastActivity);
+  idleTimer = setTimeout(() => {
+    idleTimer = undefined;
+    if (document.hidden || camera.hidden) return;
+    if (performance.now() - lastActivity < idleSeconds * 1000) {
+      scheduleIdle();
+      return;
+    }
+    sleeping = true;
+    void refreshPreview();
+  }, Math.max(0, remaining));
+}
+
+function noteActivity() {
+  if (document.hidden || camera.hidden) return;
+  lastActivity = performance.now();
+  if (idleTimer === undefined) scheduleIdle();
+  if (!sleeping) return;
+  sleeping = false;
+  previewStatus.textContent = 'Connecting to the camera…';
+  void refreshPreview();
+}
+
+function synchronizePreviewVisibility() {
+  stopIdleTimer();
+  if (!document.hidden && !camera.hidden) {
+    sleeping = false;
+    noteActivity();
+  }
+  void refreshPreview();
 }
 
 async function refreshPhotos() {
@@ -361,7 +420,22 @@ captureButton.addEventListener('click', async () => {
     captureButton.disabled = false;
   }
 });
-document.addEventListener('visibilitychange', refreshPreview);
+document.addEventListener('visibilitychange', synchronizePreviewVisibility);
+window.addEventListener('pagehide', () => {
+  stopIdleTimer();
+  stopPreview();
+});
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) synchronizePreviewVisibility();
+});
+for (const event of ['pointermove', 'pointerdown', 'keydown', 'wheel', 'change']) {
+  document.addEventListener(event, noteActivity, { passive: true });
+}
+document.addEventListener('preview-timeout', (event) => {
+  idleSeconds = event.detail;
+  stopIdleTimer();
+  noteActivity();
+});
 adminMenu.addEventListener('toggle', () => {
   if (admin) void refreshPreview();
 });
@@ -374,7 +448,9 @@ setInterval(syncGallery, 15000);
 async function enter() {
   const response = await fetch('/session');
   if (!response.ok) return locked();
-  const { role } = await response.json();
+  const session = await response.json();
+  const { role } = session;
+  idleSeconds = session.idleSeconds ?? 15;
   admin = role === 'admin';
   if (admin && location.search !== '?manage=1') {
     location.replace('/controls');
@@ -384,9 +460,9 @@ async function enter() {
   captureButton.hidden = !admin;
   unlock.hidden = invite.hidden = true;
   const current = generation;
-  await Promise.all([showAdmin(admin), loadPhotos()]);
+  await Promise.all([showAdmin(admin, idleSeconds), loadPhotos()]);
   if (admin && current === generation) adminMenu.showPopover();
-  if (current === generation) void refreshPreview();
+  if (current === generation) synchronizePreviewVisibility();
 }
 void enter().catch(() => {
   locked();

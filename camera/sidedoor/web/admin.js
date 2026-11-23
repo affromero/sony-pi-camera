@@ -11,6 +11,8 @@ const sessionStatus = byId('viewer-session-status');
 const ai = byId('ai');
 const schedule = byId('schedule');
 const scheduleFields = byId('schedule-fields');
+const previewIdle = byId('preview-idle');
+const previewSettingsStatus = byId('preview-settings-status');
 let generation = 0;
 const qrCleanup = new Map();
 const settingLabels = {
@@ -145,14 +147,16 @@ function renderAi(data) {
   key.placeholder = data.hasKey ? 'Saved. Enter a new key to replace it.' : '';
 }
 
-export function showAdmin(enabled) {
+export function showAdmin(enabled, idleSeconds) {
   const current = ++generation;
   section.hidden = !enabled;
   byId('open-admin-menu').hidden = !enabled;
   status.textContent = '';
   settingsStatus.textContent = '';
   sessionStatus.textContent = '';
+  previewSettingsStatus.textContent = '';
   if (enabled) {
+    previewIdle.value = idleSeconds;
     void act(async () => {
       const data = await get('/ai');
       if (current === generation) renderAi(data);
@@ -172,6 +176,23 @@ export function showAdmin(enabled) {
   sessions.replaceChildren();
   for (const details of menu.querySelectorAll('details')) details.open = false;
 }
+
+byId('preview-settings').onsubmit = (event) => {
+  event.preventDefault();
+  const button = event.submitter;
+  void act(async (current) => {
+    if (button) button.disabled = true;
+    try {
+      const { idleSeconds } = await post('/preview-settings', { idleSeconds: previewIdle.valueAsNumber });
+      if (generation !== current) return;
+      previewIdle.value = idleSeconds;
+      document.dispatchEvent(new CustomEvent('preview-timeout', { detail: idleSeconds }));
+      previewSettingsStatus.textContent = 'Preview timeout saved.';
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }, previewSettingsStatus);
+};
 
 function showSchedule(data) {
   byId('schedule-enabled').checked = data.enabled;

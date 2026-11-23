@@ -19,6 +19,7 @@ const ownerName = 'Camera admin';
 const familyName = 'Camera family';
 const activeStreams = new WeakMap();
 const hourMs = 60 * 60 * 1000;
+const validIdleSeconds = (value) => Number.isInteger(value) && value >= 5 && value <= 300;
 const assets = new Map(await Promise.all([
   ['/', 'index.html', 'text/html; charset=utf-8'],
   ['/viewer.css', 'viewer.css', 'text/css; charset=utf-8'],
@@ -138,6 +139,14 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
   });
   const sidedoor = createAccessHandler({ access, origin, cookieName, name: 'Sony Live Camera' });
   const ai = createAiConfig(directory);
+  const previewSettings = new FileStateStore({
+    path: join(directory, 'preview.json'),
+    initial: () => ({ idleSeconds: 15 }),
+    parse(value) {
+      if (!validIdleSeconds(value?.idleSeconds)) throw new Error('Invalid saved preview timeout');
+      return { idleSeconds: value.idleSeconds };
+    },
+  });
   let checkingPassword = false;
 
   function browserRequest(request, body) {
@@ -296,7 +305,19 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
       return;
     }
     if (route === 'GET /session') {
-      return send(response, 200, await authenticate(request, false));
+      const auth = await authenticate(request, false);
+      return send(response, 200, { ...auth, ...(await previewSettings.read()) });
+    }
+    if (route === 'POST /preview-settings') {
+      await authenticate(request, true);
+      const { idleSeconds } = await readJson(request);
+      if (!validIdleSeconds(idleSeconds))
+        return send(response, 400, { error: 'Enter a timeout from 5 to 300 seconds.' });
+      const settings = await previewSettings.transact((current) => {
+        current.idleSeconds = idleSeconds;
+        return current;
+      });
+      return send(response, 200, settings);
     }
     if (route === 'GET /stream') {
       const authorize = () => authenticate(request, false);

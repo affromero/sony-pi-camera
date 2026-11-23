@@ -52,6 +52,15 @@
         </div>
         <p><a href="/controls" title="Return to the live preview and camera controls">Back to camera controls</a></p>
         <details>
+          <summary title="Choose how long the viewer streams without interaction">Preview sleep</summary>
+          <form id="preview-settings">
+            <label for="preview-idle">Sleep after inactivity (seconds)</label>
+            <input id="preview-idle" type="number" min="5" max="300" step="1" required>
+            <button type="submit" title="Save the preview inactivity timeout">Save timeout</button>
+            <p id="preview-settings-status" role="status"></p>
+          </form>
+        </details>
+        <details>
           <summary title="Share the camera admin sign-in page">Camera access</summary>
           <button id="show-admin-qr" type="button" title="Show a scannable link to the admin password prompt">Show admin login QR code</button>
           <div id="admin-qr" class="access-qr" role="img" aria-label="QR code for the camera admin login" hidden></div>
