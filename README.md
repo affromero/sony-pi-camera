@@ -1,5 +1,6 @@
 # Sony Pi Camera
 
+[![Latest GitHub release](https://img.shields.io/github/v/release/affromero/sony-pi-camera)](https://github.com/affromero/sony-pi-camera/releases/latest)
 [![Checks on main](https://github.com/affromero/sony-pi-camera/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/affromero/sony-pi-camera/actions/workflows/checks.yml)
 [![CodeQL](https://github.com/affromero/sony-pi-camera/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/affromero/sony-pi-camera/actions/workflows/codeql.yml)
 [![Dead code](https://github.com/affromero/sony-pi-camera/actions/workflows/dead-code.yml/badge.svg?branch=main)](https://github.com/affromero/sony-pi-camera/actions/workflows/dead-code.yml)
