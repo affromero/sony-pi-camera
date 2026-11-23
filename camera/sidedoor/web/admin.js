@@ -163,18 +163,20 @@ export function showAdmin(enabled) {
   for (const details of menu.querySelectorAll('details')) details.open = false;
 }
 
-byId('refresh-settings').onclick = () => act(loadSettings, settingsStatus);
 function showSchedule(data) {
   byId('schedule-enabled').checked = data.enabled;
   byId('schedule-times').value = data.times.join(', ');
   byId('schedule-zone').value = data.timezone;
 }
 
-byId('refresh-schedule').onclick = () => act(async (current) => {
-  const data = await get('/schedule');
-  if (generation !== current) return;
-  showSchedule(data);
-  scheduleFields.disabled = false;
+schedule.closest('details').addEventListener('toggle', () => {
+  if (!schedule.closest('details').open || !scheduleFields.disabled) return;
+  void act(async (current) => {
+    const data = await get('/schedule');
+    if (generation !== current) return;
+    showSchedule(data);
+    scheduleFields.disabled = false;
+  });
 });
 
 schedule.onsubmit = (event) => {
@@ -198,7 +200,9 @@ schedule.onsubmit = (event) => {
 };
 byId('show-admin-qr').onclick = () => act((current) =>
   showQr(byId('admin-qr'), location.origin + '/', current));
-byId('refresh-sessions').onclick = () => act(loadSessions);
+sessions.closest('details').addEventListener('toggle', () => {
+  if (sessions.closest('details').open) void act(loadSessions);
+});
 byId('check-ai').onclick = () => act(async (current) => {
   const result = await post('/ai/check');
   if (generation !== current) return;

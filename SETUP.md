@@ -128,6 +128,8 @@ For a separate private admin hostname, set distinct origins and route the admin 
 
 Sign in as admin and create a link under **Viewer invitations**. Share the link or its QR code with one recipient. The QR code under **Camera access** opens the admin login page and still requires the password.
 
+After admin sign-in, the shared site opens the same camera controls used on the Pi. Use the menu at the top right to manage invitations and AI advice.
+
 
 ## Daily photos
 

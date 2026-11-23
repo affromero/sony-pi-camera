@@ -11,8 +11,12 @@ const preview = byId('preview');
 const previewStatus = byId('preview-status');
 const captureButton = byId('capture-photo');
 const captureStatus = byId('capture-status');
+const photoDialog = byId('photo-dialog');
+const photoFull = byId('photo-full');
+const photoStatus = byId('photo-status');
 let generation = 0;
 let galleryRequest = 0;
+let gallerySnapshot = '';
 let timer;
 let imageUrl;
 let admin = false;
@@ -24,6 +28,7 @@ if (inviteCode) history.replaceState(null, '', location.pathname);
 function locked() {
   generation++;
   galleryRequest++;
+  gallerySnapshot = '';
   clearTimeout(timer);
   streamRequest?.abort();
   if (imageUrl) URL.revokeObjectURL(imageUrl);
@@ -33,6 +38,7 @@ function locked() {
   previewStatus.hidden = false;
   previewStatus.textContent = 'Waiting for the camera…';
   photos.replaceChildren();
+  photoDialog.close();
   camera.hidden = lock.hidden = true;
   captureButton.hidden = true;
   captureStatus.textContent = '';
@@ -45,13 +51,41 @@ function locked() {
   showAdmin(false);
 }
 
+function openPhoto(name, encoded) {
+  byId('photo-title').textContent = name.split('/').at(-1);
+  byId('photo-download').href = '/download/' + encoded;
+  photoFull.hidden = true;
+  photoFull.alt = name.split('/').at(-1);
+  photoStatus.textContent = 'Loading photo…';
+  photoDialog.showModal();
+  photoFull.src = (/\.(jpe?g|png|webp)$/i.test(name) ? '/photo/' : '/thumbnail/') + encoded;
+}
+
+photoFull.addEventListener('load', () => {
+  if (!photoDialog.open) return;
+  photoFull.hidden = false;
+  photoStatus.textContent = '';
+});
+photoFull.addEventListener('error', () => {
+  if (!photoDialog.open) return;
+  photoStatus.textContent = 'Preview unavailable. You can still download the original.';
+});
+photoDialog.addEventListener('close', () => {
+  photoFull.removeAttribute('src');
+  photoFull.hidden = true;
+  byId('photo-download').removeAttribute('href');
+});
+photoDialog.addEventListener('click', (event) => {
+  if (event.target === photoDialog) photoDialog.close();
+});
+
 function renderPhotos(entries) {
   const rows = entries.map(({ name, bytes }) => {
     const row = document.createElement('li');
-    const link = document.createElement('a');
+    const link = document.createElement('button');
     const encoded = encodeURIComponent(name);
-    link.href = '/download/' + encoded;
-    link.download = '';
+    link.type = 'button';
+    link.onclick = () => openPhoto(name, encoded);
     link.className = 'photo-link';
     const thumb = document.createElement('span');
     thumb.className = 'photo-thumbnail';
@@ -194,7 +228,11 @@ async function refreshPhotos() {
   if (response.status === 401) return locked();
   if (!response.ok) throw new Error();
   const entries = await response.json();
-  if (current === galleryRequest) renderPhotos(entries);
+  const snapshot = JSON.stringify(entries);
+  if (current === galleryRequest && snapshot !== gallerySnapshot) {
+    gallerySnapshot = snapshot;
+    renderPhotos(entries);
+  }
 }
 
 async function loadPhotos() {
@@ -202,7 +240,7 @@ async function loadPhotos() {
   try {
     await refreshPhotos();
   } catch {
-    status.textContent = 'Photos are temporarily unavailable. Try refreshing.';
+    status.textContent = 'Photos are temporarily unavailable. Reconnecting…';
   }
 }
 
@@ -248,7 +286,6 @@ lock.addEventListener('click', async () => {
     status.textContent = 'Could not lock the viewer. Try again.';
   }
 });
-byId('refresh').addEventListener('click', loadPhotos);
 captureButton.addEventListener('click', async () => {
   const current = generation;
   captureButton.disabled = true;
@@ -265,18 +302,28 @@ captureButton.addEventListener('click', async () => {
   }
 });
 document.addEventListener('visibilitychange', refreshPreview);
+function syncGallery() {
+  if (!document.hidden && !camera.hidden) void loadPhotos();
+}
+document.addEventListener('visibilitychange', syncGallery);
+setInterval(syncGallery, 15000);
 
 async function enter() {
   const response = await fetch('/session');
   if (!response.ok) return locked();
   const { role, privateStream: streaming } = await response.json();
   admin = role === 'admin';
+  if (admin && location.search !== '?manage=1') {
+    location.replace('/controls');
+    return;
+  }
   privateStream = admin && streaming;
   camera.hidden = lock.hidden = false;
   captureButton.hidden = !admin;
   unlock.hidden = invite.hidden = true;
   const current = generation;
   await Promise.all([showAdmin(admin), loadPhotos()]);
+  if (admin && current === generation) byId('admin-menu').showPopover();
   if (current === generation) void refreshPreview();
 }
 void enter().catch(() => {

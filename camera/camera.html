@@ -6,7 +6,11 @@
 <rect x="1" y="1" width="27" height="14" rx="4" fill="none" stroke="currentColor"/>
 <rect x="3" y="3" width="0" height="10" rx="2" id="battery-fill"/>
 <path d="M30 5q4 3 0 6z" fill="currentColor"/></svg>
-<div><strong id="battery-level">Unavailable</strong><small id="battery-state"></small></div></div></header>
+<div><strong id="battery-level">Unavailable</strong><small id="battery-state"></small></div></div>
+<div class="sidedoor-actions">
+<button type="button" id="controls-lock">Lock</button>
+<a href="/?manage=1" aria-label="Camera administration" title="Camera administration">☰</a>
+</div></header>
 <div id="login" class="login" hidden><form id="login-form"><h1>Camera access</h1><p>Enter the camera access key for this Pi.</p><label>Access key <input id="access-key" type="password" required autocomplete="off"></label><button type="submit">Open camera</button><p id="login-error" role="alert"></p></form></div>
 <main><div class="heading"><div><p>SONY α7 III</p><h1>Camera</h1></div><span id="status" role="status">Connecting…</span></div>
 <fieldset id="camera-controls" aria-label="Camera controls">

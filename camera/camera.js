@@ -1,11 +1,14 @@
 const $ = id => document.getElementById(id);
-let token = location.hash.slice(1) || sessionStorage.getItem('camera-token');
-if (location.hash) { sessionStorage.setItem('camera-token', token); history.replaceState(null, '', '/'); }
+const sidedoor = document.body.hasAttribute('data-sidedoor');
+let token = sidedoor ? '' : location.hash.slice(1) || sessionStorage.getItem('camera-token');
+const connected = () => sidedoor || Boolean(token);
+if (!sidedoor && location.hash) { sessionStorage.setItem('camera-token', token); history.replaceState(null, '', '/'); }
+const frameInterval = sidedoor ? 350 : 50;
 let operation = '';
 let externalBusy = false;
 let pendingPreview = null;
 let previewTimer;
-let previewDelay = 50;
+let previewDelay = frameInterval;
 let imageUrl;
 let modalUrl;
 let modalName;
@@ -152,9 +155,10 @@ function showMagnifier(response, frame) {
   ctx.strokeRect((x - 0.5 / ratio) * 160, (y - 0.5 / ratio) * 107, 160 / ratio, 107 / ratio);
 }
 async function api(path, options = {}) {
-  const headers = {'X-Camera-Token': token || '', ...options.headers};
+  const headers = sidedoor ? options.headers : {'X-Camera-Token': token || '', ...options.headers};
   const response = await fetch(path, {...options, headers});
   if (!response.ok) {
+    if (sidedoor && (response.status === 401 || response.status === 403)) location.replace('/');
     if (response.status === 409) {
       externalBusy = true;
       updateActivity();
@@ -169,7 +173,7 @@ async function api(path, options = {}) {
 async function post(path, value) { return api(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(value)}); }
 function schedulePreview(delay = previewDelay) {
   clearTimeout(previewTimer);
-  if (!token || document.hidden || operation || pendingPreview) return;
+  if (!connected() || document.hidden || operation || pendingPreview) return;
   previewTimer = setTimeout(async () => {
     if (document.hidden || operation) return;
     pendingPreview = readPreview(false);
@@ -215,7 +219,7 @@ async function readPreview(afterOperation) {
       externalBusy = false;
       updateActivity();
     }
-    previewDelay = 50;
+    previewDelay = frameInterval;
   } catch (error) {
     previewDelay = Math.min(4000, Math.max(500, previewDelay * 2));
     if (stale() || error.status === 409) return;
@@ -489,7 +493,7 @@ $('capture').onclick = async () => {
   });
 };
 for (const id of ['photo-from','photo-through','photo-sort']) $(id).onchange = renderPhotos;
-function syncPhotos() { if (token && !document.hidden) photos(); }
+function syncPhotos() { if (connected() && !document.hidden) photos(); }
 setInterval(syncPhotos, 5000);
 document.addEventListener('visibilitychange', syncPhotos);
 function start() { syncVisibleSettings(); syncPhotos(); }
@@ -525,7 +529,7 @@ function showSchedule(schedule) {
 let scheduleLoaded = false;
 let scheduleLoading = false;
 async function loadSchedule() {
-  if (scheduleLoaded || scheduleLoading || !token) return;
+  if (scheduleLoaded || scheduleLoading || !connected()) return;
   scheduleLoading = true;
   $('schedule-retry').hidden = true;
   $('schedule-status').textContent = 'Reading schedule…';
@@ -572,7 +576,18 @@ $('schedule-form').onsubmit = async event => {
     $('schedule-fields').disabled = false;
   }
 };
-if (token) start();
+if (sidedoor) {
+  $('controls-lock').onclick = async () => {
+    try {
+      const response = await fetch('/access/logout', {method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      if (!response.ok && response.status !== 401) throw new Error();
+      location.replace('/');
+    } catch {
+      $('status').textContent = 'Could not lock the camera. Try again.';
+    }
+  };
+}
+if (connected()) start();
 else {
   $('login').hidden = false;
   $('login-form').onsubmit = async event => {
@@ -586,7 +601,7 @@ function syncVisibleSettings() {
     clearTimeout(previewTimer);
     return;
   }
-  if (token && !selecting && !externalBusy) withCamera('Reading camera settings…', settings);
+  if (connected() && !selecting && !externalBusy) withCamera('Reading camera settings…', settings);
   else schedulePreview();
 }
 document.addEventListener('visibilitychange', syncVisibleSettings);

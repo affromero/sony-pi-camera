@@ -92,8 +92,9 @@ button[type="submit"]:hover { background: #004fa8; }
 #photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
   gap: 1rem; margin: 1rem 0 0; padding: 0; list-style: none; }
 #photos li { min-width: 0; overflow-wrap: anywhere; }
-#photos li > a { min-width: 0; }
-.photo-link { display: grid; gap: .45rem; font-size: .875rem; text-decoration: none; }
+.photo-link { display: grid; gap: .45rem; width: 100%; min-width: 0; padding: 0; border: 0;
+  background: transparent; color: var(--accent); font-size: .875rem; text-align: left; }
+.photo-link:hover { background: transparent; }
 .photo-link:hover { text-decoration: underline; }
 .photo-thumbnail { display: block; width: 100%; aspect-ratio: 3 / 2; background: #e5e5ea;
   border-radius: .65rem; overflow: hidden; }
@@ -109,6 +110,14 @@ button[type="submit"]:hover { background: #004fa8; }
   margin-top: .35rem;
 }
 .photo-actions span { white-space: nowrap; }
+#photo-dialog { width: min(72rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem);
+  padding: 0; border: 1px solid var(--line); border-radius: 1rem; background: var(--paper); color: var(--ink); }
+#photo-dialog::backdrop { background: #111116b5; }
+.photo-dialog-header { display: flex; flex-wrap: wrap; align-items: center; gap: .8rem; padding: .75rem 1rem; }
+.photo-dialog-header h2 { flex: 1; min-width: 8rem; font-size: 1rem; overflow-wrap: anywhere; }
+.photo-dialog-image { display: grid; place-items: center; min-height: 8rem; background: #17171a; }
+.photo-dialog-image img { display: block; max-width: 100%; max-height: 77dvh; object-fit: contain; }
+.photo-dialog-image p { margin: 0; padding: 1rem; color: #dddde4; }
 
 #admin, #admin-menu { padding: 1rem; border: 1px solid var(--line); border-radius: 1rem; background: var(--paper); }
 .settings-heading { display: flex; align-items: center; justify-content: space-between; gap: .65rem; }

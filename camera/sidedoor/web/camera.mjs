@@ -59,7 +59,7 @@ export function createCamera({ port, cameraToken, previewInterval = 2000 }) {
     return { status: result.status, data: { error: result.status === 409 ? 'Camera busy.' : 'Camera request failed.' } };
   }
 
-  async function download(name, response) {
+  async function download(name, response, inline = false) {
     if (downloads >= 2) return 429;
     downloads++;
     const disconnect = new AbortController();
@@ -73,11 +73,17 @@ export function createCamera({ port, cameraToken, previewInterval = 2000 }) {
         await result.body?.cancel();
         return 404;
       }
+      const type = result.headers.get('content-type');
+      if (inline && !['image/jpeg', 'image/png', 'image/webp'].includes(type)) {
+        await result.body.cancel();
+        return 415;
+      }
       const filename = name.split('/').at(-1);
       const encoded = encodeURIComponent(filename).replace(/['()*]/g, (char) =>
         '%' + char.charCodeAt(0).toString(16).toUpperCase());
-      response.setHeader('Content-Type', 'application/octet-stream');
-      response.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encoded}`);
+      response.setHeader('Content-Type', inline ? type : 'application/octet-stream');
+      if (inline) response.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+      response.setHeader('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encoded}`);
       const length = result.headers.get('content-length');
       if (length !== null) response.setHeader('Content-Length', length);
       await pipeline(Readable.fromWeb(result.body), response);
@@ -97,7 +103,32 @@ export function createCamera({ port, cameraToken, previewInterval = 2000 }) {
     return Buffer.from(await result.arrayBuffer());
   }
 
-  return { preview, download, json, thumbnail };
+  async function cameraControl(path, response, body) {
+    const disconnect = new AbortController();
+    const cancel = () => disconnect.abort();
+    response.once('close', cancel);
+    try {
+      const signal = AbortSignal.any([disconnect.signal, AbortSignal.timeout(120000)]);
+      const result = await request(path, signal, body);
+      const type = result.headers.get('content-type');
+      if (!result.body || !['application/json', 'image/jpeg'].includes(type)) {
+        await result.body?.cancel();
+        return 502;
+      }
+      for (const name of ['content-type', 'content-length', 'x-preview-backend',
+        'x-magnification', 'x-magnifier-x', 'x-magnifier-y']) {
+        const value = result.headers.get(name);
+        if (value !== null) response.setHeader(name, value);
+      }
+      response.writeHead(result.status);
+      await pipeline(Readable.fromWeb(result.body), response);
+      return 200;
+    } finally {
+      response.off('close', cancel);
+    }
+  }
+
+  return { preview, download, json, thumbnail, cameraControl };
 }
 
 export function photoName(encoded) {

@@ -37,6 +37,17 @@ const cameraRoutes = new Map([
   ['POST /capture', '/api/capture'],
   ['POST /delete', '/api/delete'],
 ]);
+const controlAssets = new Map([
+  ['/controls', ['camera.html', 'text/html; charset=utf-8']],
+  ['/camera.js', ['camera.js', 'text/javascript; charset=utf-8']],
+  ['/camera.css', ['camera.css', 'text/css; charset=utf-8']],
+]);
+const controlRoutes = new Set([
+  'GET /api/preview', 'GET /api/settings', 'GET /api/schedule',
+  'GET /api/photos', 'GET /api/photos?details=1',
+  'POST /api/capture', 'POST /api/setting', 'POST /api/focus',
+  'POST /api/magnifier', 'POST /api/schedule', 'POST /api/delete',
+]);
 
 function send(response, status, value, type) {
   const body = type ? value : JSON.stringify(value);
@@ -44,9 +55,9 @@ function send(response, status, value, type) {
   response.end(body);
 }
 
-async function readJson(request) {
+async function readJson(request, maxLength = 8192) {
   const length = Number(request.headers['content-length']);
-  if (!Number.isInteger(length) || length < 1 || length > 8192 ||
+  if (!Number.isInteger(length) || length < 1 || length > maxLength ||
       request.headers['content-type'] !== 'application/json') throw new AccessError('invalid');
   const chunks = [];
   for await (const chunk of request) chunks.push(chunk);
@@ -175,7 +186,7 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
       return;
     }
     const route = request.method + ' ' + path;
-    const photoRoute = request.method === 'GET' && /^\/(thumbnail|download)\/([^/?]+)$/.exec(path);
+    const photoRoute = request.method === 'GET' && /^\/(thumbnail|photo|download)\/([^/?]+)$/.exec(path);
     if (guest && !(request.method === 'GET' && (
       ['/', '/viewer.css', '/viewer.js', '/admin.js', '/session', '/photos', '/preview'].includes(path) ||
       photoRoute
@@ -189,10 +200,30 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
       const script = await readFile(new URL('admin-qr.js', import.meta.url));
       return send(response, 200, script, 'text/javascript; charset=utf-8');
     }
-    if (request.method === 'GET' && assets.has(path)) {
-      const [body, type] = assets.get(path);
+    const assetPath = path === '/?manage=1' && !guest ? '/' : path;
+    if (request.method === 'GET' && assets.has(assetPath)) {
+      const [body, type] = assets.get(assetPath);
       if (guest && path === '/') return send(response, 200, body.toString().replace('<body>', '<body data-guest>'), type);
       return send(response, 200, body, type);
+    }
+    if (request.method === 'GET' && controlAssets.has(path)) {
+      await authenticate(request, true);
+      const [file, type] = controlAssets.get(path);
+      let content = await readFile(new URL('../../' + file, import.meta.url), 'utf8');
+      if (path === '/controls') content = content.replace('<body>', '<body data-sidedoor>');
+      return send(response, 200, content, type);
+    }
+    const controlPhoto = request.method === 'GET' && /^\/api\/(photos|thumbnail)\/([^/?]+)$/.exec(path);
+    if (controlRoutes.has(route) || controlPhoto) {
+      await authenticate(request, true);
+      const name = controlPhoto && photoName(controlPhoto[2]);
+      if (controlPhoto && !name) return send(response, 404, { error: 'Photo unavailable.' });
+      const body = request.method === 'POST' ? await readJson(request, 4096) : undefined;
+      const result = controlPhoto?.[1] === 'photos'
+        ? await camera.download(name, response, /\.(jpe?g|png|webp)$/i.test(name))
+        : await camera.cameraControl(path, response, body);
+      if (result !== 200) send(response, result, { error: 'Camera request failed.' });
+      return;
     }
     if (route === 'GET /session') {
       const session = await authenticate(request, false);
@@ -241,8 +272,8 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
           if (jpeg) return send(response, 200, jpeg, 'image/jpeg');
           return send(response, 404, { error: 'Thumbnail unavailable.' });
         }
-        const status = await camera.download(name, response);
-        if (status !== 200) send(response, status, { error: 'Download unavailable.' });
+        const status = await camera.download(name, response, photoRoute[1] === 'photo');
+        if (status !== 200) send(response, status, { error: 'Photo unavailable.' });
         return;
       }
     }

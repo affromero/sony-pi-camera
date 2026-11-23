@@ -82,6 +82,9 @@ test('serves admins and read-only invitees on the same hostname', { timeout: 800
   assert.deepEqual((await get('/photos', viewer.cookie)).data, [{ name: 'street.jpg' }]);
   assert.equal((await get('/settings', viewer.cookie)).status, 403);
   assert.equal((await get('/ai', viewer.cookie)).status, 403);
+  assert.equal((await get('/controls', viewer.cookie)).status, 403);
+  assert.equal((await get('/camera.js', viewer.cookie)).status, 403);
+  assert.equal((await post('/api/focus', { x: 0.5, y: 0.5 }, viewer.cookie)).status, 403);
   assert.equal((await get('/schedule', viewer.cookie)).status, 403);
   assert.equal((await post('/schedule', { ...daily, enabled: false }, viewer.cookie)).status, 403);
   assert.equal((await get('/admin-qr.js', viewer.cookie)).status, 403);
@@ -99,9 +102,15 @@ test('keeps viewer invitations read-only and admin AI credentials private', { ti
     if (req.headers['x-camera-token'] !== 'camera-key') return res.writeHead(403).end();
     if (req.url === '/api/preview') {
       previewCalls++;
-      return res.writeHead(200, { 'Content-Type': 'image/jpeg', 'X-Preview-Backend': 'rust' }).end('jpeg');
+      return res.writeHead(200, {
+        'Content-Type': 'image/jpeg', 'X-Preview-Backend': 'rust', 'X-Magnification': '5.9',
+      }).end('jpeg');
     }
     if (req.url === '/api/photos/nonempty%2Fa%20%25.raw') return res.end('original');
+    if (req.url === '/api/photos/street.jpg')
+      return res.writeHead(200, { 'Content-Type': 'image/jpeg' }).end('original jpeg');
+    if (req.url === '/api/photos/unsafe.svg')
+      return res.writeHead(200, { 'Content-Type': 'image/svg+xml' }).end('<svg/>');
     if (req.url === '/api/thumbnail/nonempty%2Fa%20%25.raw')
       return res.writeHead(200, { 'Content-Type': 'image/jpeg' }).end('thumbnail');
     if (req.url === '/api/photos?details=1') return res.end(JSON.stringify(deleted ? [] : [{ name: 'nonempty/a %.raw' }]));
@@ -112,6 +121,8 @@ test('keeps viewer invitations read-only and admin AI credentials private', { ti
     for await (const chunk of req) chunks.push(chunk);
     const data = JSON.parse(Buffer.concat(chunks));
     if (req.url === '/api/setting' && data.name === 'iso') iso = data.value;
+    else if (req.url === '/api/focus' && data.x === 0.5 && data.y === 0.5)
+      return res.writeHead(200, { 'Content-Type': 'application/json' }).end('{"locked":true}');
     else if (req.url === '/api/delete' && data.name === 'nonempty/a %.raw') deleted = true;
     else return res.writeHead(404).end();
     res.end(JSON.stringify({ ok: true }));
@@ -150,6 +161,18 @@ test('keeps viewer invitations read-only and admin AI credentials private', { ti
   assert.equal(owner.status, 200);
   assert.match(owner.headers['set-cookie'][0], /HttpOnly.*Secure/);
   assert.equal((await get('/session', owner.cookie)).data.role, 'admin');
+  assert.equal((await get('/controls')).status, 401);
+  const controls = await get('/controls', owner.cookie);
+  assert.equal(controls.status, 200);
+  assert.match(controls.data.toString(), /<body data-sidedoor>/);
+  assert.match(controls.data.toString(), /id="focus-target"/);
+  const controlPreview = await get('/api/preview', owner.cookie);
+  assert.equal(controlPreview.headers['x-magnification'], '5.9');
+  assert.equal(controlPreview.data.toString(), 'jpeg');
+  previewCalls = 0;
+  assert.equal((await post('/api/focus', { x: 0.5, y: 0.5 }, owner.cookie)).data.locked, true);
+  assert.equal((await post('/api/focus', { x: 0.5, y: 0.5 }, owner.cookie, 'https://other.example.test')).status, 403);
+  assert.equal((await get('/api/advice-input', owner.cookie)).status, 404);
   const invitation = await post('/access/issue-invitation', { uses: null }, owner.cookie);
   assert.equal(invitation.status, 200);
   const redeemed = await guestPost('/access/redeem-invitation', { code: invitation.data.code });
@@ -163,6 +186,15 @@ test('keeps viewer invitations read-only and admin AI credentials private', { ti
   assert.equal(thumbnail.data.toString(), 'thumbnail');
   assert.match(thumbnail.headers['cache-control'], /no-store/);
   assert.equal((await guestGet('/thumbnail/%2e%2e%2Ffile', guest)).status, 404);
+  assert.equal((await guestGet('/photo/street.jpg')).status, 401);
+  const original = await guestGet('/photo/street.jpg', guest);
+  assert.equal(original.status, 200);
+  assert.equal(original.headers['content-type'], 'image/jpeg');
+  assert.match(original.headers['content-disposition'], /^inline/);
+  assert.match(original.headers['cache-control'], /no-store/);
+  assert.equal(original.data.toString(), 'original jpeg');
+  assert.equal((await guestGet('/photo/unsafe.svg', guest)).status, 415);
+  assert.equal((await guestGet('/photo/%2e%2e%2Ffile', guest)).status, 404);
   assert.equal((await guestGet('/stream', guest)).status, 404);
   assert.equal((await guestGet('/session', owner.cookie)).status, 403);
   assert.equal((await guestPost('/access/logout', {}, owner.cookie)).status, 403);
