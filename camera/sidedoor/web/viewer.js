@@ -14,6 +14,8 @@ const captureStatus = byId('capture-status');
 const photoDialog = byId('photo-dialog');
 const photoFull = byId('photo-full');
 const photoStatus = byId('photo-status');
+const photoLoading = byId('photo-loading');
+const photoProgress = byId('photo-progress');
 const familyLogin = document.body.hasAttribute('data-family');
 const guestPage = document.body.hasAttribute('data-guest');
 const adminButton = byId('login-admin');
@@ -24,6 +26,8 @@ if (familyLogin) byId('password-label').textContent = 'Camera password';
 let generation = 0;
 let galleryRequest = 0;
 let gallerySnapshot = '';
+let photoRequest;
+let photoUrl;
 let timer;
 let imageUrl;
 let admin = false;
@@ -58,28 +62,81 @@ function locked() {
   showAdmin(false);
 }
 
-function openPhoto(name, encoded) {
-  byId('photo-title').textContent = name.split('/').at(-1);
-  byId('photo-download').href = '/download/' + encoded;
-  photoFull.hidden = true;
-  photoFull.alt = name.split('/').at(-1);
-  photoStatus.textContent = 'Loading photo…';
-  photoDialog.showModal();
-  photoFull.src = (/\.(jpe?g|png|webp)$/i.test(name) ? '/photo/' : '/thumbnail/') + encoded;
+const fileSize = (bytes) => bytes < 1_000_000 ? `${Math.ceil(bytes / 1000)} KB` :
+  `${(bytes / 1_000_000).toFixed(1)} MB`;
+
+function showPhotoProgress(received, total, complete = false) {
+  if (Number.isFinite(total) && total > 0) {
+    const percent = complete ? 100 : Math.min(99, Math.floor(received / total * 100));
+    photoProgress.value = percent;
+    byId('photo-percent').textContent = `${percent}%`;
+    byId('photo-bytes').textContent = `${fileSize(received)} of ${fileSize(total)}`;
+  } else {
+    photoProgress.removeAttribute('value');
+    byId('photo-percent').textContent = 'Loading photo…';
+    byId('photo-bytes').textContent = `${fileSize(received)} loaded`;
+  }
 }
 
-photoFull.addEventListener('load', () => {
-  if (!photoDialog.open) return;
-  photoFull.hidden = false;
-  photoStatus.textContent = '';
-});
-photoFull.addEventListener('error', () => {
-  if (!photoDialog.open) return;
-  photoStatus.textContent = 'Preview unavailable. You can still download the original.';
-});
-photoDialog.addEventListener('close', () => {
+function clearPhoto() {
+  photoRequest?.abort();
+  photoRequest = undefined;
   photoFull.removeAttribute('src');
   photoFull.hidden = true;
+  if (photoUrl) URL.revokeObjectURL(photoUrl);
+  photoUrl = undefined;
+}
+
+async function openPhoto(name, encoded, bytes) {
+  clearPhoto();
+  const request = new AbortController();
+  photoRequest = request;
+  const original = /\.(jpe?g|png|webp)$/i.test(name);
+  byId('photo-title').textContent = name.split('/').at(-1);
+  byId('photo-download').href = '/download/' + encoded;
+  photoFull.alt = name.split('/').at(-1);
+  photoStatus.textContent = '';
+  photoLoading.hidden = false;
+  showPhotoProgress(0, original ? bytes : 0);
+  photoDialog.showModal();
+  try {
+    const response = await fetch((original ? '/photo/' : '/thumbnail/') + encoded, {signal: request.signal});
+    if (!response.ok) throw new Error('Photo request failed');
+    const encoding = response.headers.get('Content-Encoding');
+    const length = !encoding || encoding === 'identity' ? Number(response.headers.get('Content-Length')) : 0;
+    const total = length || (original ? bytes : 0);
+    let received = 0;
+    const chunks = [];
+    showPhotoProgress(received, total);
+    const reader = response.body.getReader();
+    try {
+      for (;;) {
+        const {done, value} = await reader.read();
+        if (request.signal.aborted) return;
+        if (done) break;
+        chunks.push(value);
+        received += value.byteLength;
+        showPhotoProgress(received, total);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    showPhotoProgress(received, total, true);
+    photoUrl = URL.createObjectURL(new Blob(chunks, {type: response.headers.get('Content-Type')}));
+    photoFull.src = photoUrl;
+    await photoFull.decode();
+    if (!request.signal.aborted) photoFull.hidden = false;
+  } catch {
+    if (!request.signal.aborted)
+      photoStatus.textContent = 'Preview unavailable. You can still download the original.';
+  } finally {
+    if (photoRequest === request) photoLoading.hidden = true;
+  }
+}
+
+photoDialog.addEventListener('close', () => {
+  if (photoDialog.open) return;
+  clearPhoto();
   byId('photo-download').removeAttribute('href');
 });
 photoDialog.addEventListener('click', (event) => {
@@ -92,7 +149,7 @@ function renderPhotos(entries) {
     const link = document.createElement('button');
     const encoded = encodeURIComponent(name);
     link.type = 'button';
-    link.onclick = () => openPhoto(name, encoded);
+    link.onclick = () => openPhoto(name, encoded, bytes);
     link.className = 'photo-link';
     const thumb = document.createElement('span');
     thumb.className = 'photo-thumbnail';
@@ -107,8 +164,7 @@ function renderPhotos(entries) {
     filename.textContent = name;
     link.append(thumb, filename);
     const size = document.createElement('span');
-    size.textContent = bytes < 1_000_000 ? `${Math.ceil(bytes / 1000)} KB` :
-      `${(bytes / 1_000_000).toFixed(1)} MB`;
+    size.textContent = fileSize(bytes);
     const actions = document.createElement('div');
     actions.className = 'photo-actions';
     actions.append(size);

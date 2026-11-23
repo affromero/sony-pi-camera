@@ -115,6 +115,11 @@
       </div>
       <div class="photo-dialog-image">
         <img id="photo-full" alt="" hidden>
+        <div id="photo-loading" class="photo-loading" hidden>
+          <p id="photo-percent">Loading photo…</p>
+          <progress id="photo-progress" max="100" aria-label="Photo loading progress"></progress>
+          <p id="photo-bytes"></p>
+        </div>
         <p id="photo-status" role="status"></p>
       </div>
     </dialog>

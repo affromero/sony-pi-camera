@@ -112,12 +112,16 @@ button[type="submit"]:hover { background: #004fa8; }
 .photo-actions span { white-space: nowrap; }
 #photo-dialog { width: min(72rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem);
   padding: 0; border: 1px solid var(--line); border-radius: 1rem; background: var(--paper); color: var(--ink); }
+#photo-dialog[open] { display: grid; grid-template-rows: auto minmax(0, 1fr); height: min(52rem, calc(100dvh - 2rem)); }
 #photo-dialog::backdrop { background: #111116b5; }
 .photo-dialog-header { display: flex; flex-wrap: wrap; align-items: center; gap: .8rem; padding: .75rem 1rem; }
 .photo-dialog-header h2 { flex: 1; min-width: 8rem; font-size: 1rem; overflow-wrap: anywhere; }
-.photo-dialog-image { display: grid; place-items: center; min-height: 8rem; background: #17171a; }
-.photo-dialog-image img { display: block; max-width: 100%; max-height: 77dvh; object-fit: contain; }
+.photo-dialog-image { display: grid; place-items: center; overflow: hidden; background: #17171a; }
+.photo-dialog-image > * { grid-area: 1 / 1; }
+.photo-dialog-image img { display: block; width: 100%; height: 100%; min-height: 0; object-fit: contain; }
 .photo-dialog-image p { margin: 0; padding: 1rem; color: #dddde4; }
+.photo-loading { width: min(24rem, 85%); text-align: center; font-variant-numeric: tabular-nums; }
+.photo-loading progress { width: 100%; accent-color: #63a7ff; }
 
 #admin, #admin-menu { padding: 1rem; border: 1px solid var(--line); border-radius: 1rem; background: var(--paper); }
 .settings-heading { display: flex; align-items: center; justify-content: space-between; gap: .65rem; }
