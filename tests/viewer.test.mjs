@@ -99,6 +99,8 @@ test('keeps viewer invitations read-only and admin AI credentials private', { ti
       return res.writeHead(200, { 'Content-Type': 'image/jpeg', 'X-Preview-Backend': 'rust' }).end('jpeg');
     }
     if (req.url === '/api/photos/nonempty%2Fa%20%25.raw') return res.end('original');
+    if (req.url === '/api/thumbnail/nonempty%2Fa%20%25.raw')
+      return res.writeHead(200, { 'Content-Type': 'image/jpeg' }).end('thumbnail');
     if (req.url === '/api/photos?details=1') return res.end(JSON.stringify(deleted ? [] : [{ name: 'nonempty/a %.raw' }]));
     if (req.url === '/api/settings') return res.end(JSON.stringify({ iso }));
     if (req.method !== 'POST' || req.headers.origin !== `http://127.0.0.1:${upstream.address().port}`)
@@ -152,6 +154,12 @@ test('keeps viewer invitations read-only and admin AI credentials private', { ti
   const guest = redeemed.cookie;
   assert.equal((await guestPost('/access/redeem-invitation', { code: invitation.data.code })).status, 401);
   assert.equal((await guestGet('/session', guest)).data.role, 'viewer');
+  assert.equal((await guestGet('/thumbnail/nonempty%2Fa%20%25.raw')).status, 401);
+  const thumbnail = await guestGet('/thumbnail/nonempty%2Fa%20%25.raw', guest);
+  assert.equal(thumbnail.headers['content-type'], 'image/jpeg');
+  assert.equal(thumbnail.data.toString(), 'thumbnail');
+  assert.match(thumbnail.headers['cache-control'], /no-store/);
+  assert.equal((await guestGet('/thumbnail/%2e%2e%2Ffile', guest)).status, 404);
   assert.equal((await guestGet('/stream', guest)).status, 404);
   assert.equal((await guestGet('/session', owner.cookie)).status, 403);
   assert.equal((await guestPost('/access/logout', {}, owner.cookie)).status, 403);

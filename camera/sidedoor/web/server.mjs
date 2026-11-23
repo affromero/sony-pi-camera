@@ -174,9 +174,10 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
       return;
     }
     const route = request.method + ' ' + path;
+    const photoRoute = request.method === 'GET' && /^\/(thumbnail|download)\/([^/?]+)$/.exec(path);
     if (guest && !(request.method === 'GET' && (
       ['/', '/viewer.css', '/viewer.js', '/admin.js', '/session', '/photos', '/preview'].includes(path) ||
-      /^\/download\/[^/?]+$/.test(path)
+      photoRoute
     )) && !(request.method === 'POST' && ['/access/redeem-invitation', '/access/logout'].includes(path)))
       return send(response, 404, { error: 'Not found.' });
     if (request.method === 'POST' && (request.headers.origin !== origin ||
@@ -230,11 +231,15 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
       const frame = await camera.preview();
       return frame ? send(response, 200, frame, 'image/jpeg') : send(response, 503, { error: 'Preview unavailable.' });
     }
-    const download = request.method === 'GET' && /^\/download\/([^/?]+)$/.exec(path);
-    if (download) {
+    if (photoRoute) {
       await authenticate(request, false);
-      const name = photoName(download[1]);
+      const name = photoName(photoRoute[2]);
       if (name) {
+        if (photoRoute[1] === 'thumbnail') {
+          const jpeg = await camera.thumbnail(name);
+          if (jpeg) return send(response, 200, jpeg, 'image/jpeg');
+          return send(response, 404, { error: 'Thumbnail unavailable.' });
+        }
         const status = await camera.download(name, response);
         if (status !== 200) send(response, status, { error: 'Download unavailable.' });
         return;

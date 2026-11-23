@@ -45,9 +45,22 @@ function renderPhotos(entries) {
   const rows = entries.map(({ name, bytes }) => {
     const row = document.createElement('li');
     const link = document.createElement('a');
-    link.href = '/download/' + encodeURIComponent(name);
-    link.textContent = name;
+    const encoded = encodeURIComponent(name);
+    link.href = '/download/' + encoded;
     link.download = '';
+    link.className = 'photo-link';
+    const thumb = document.createElement('span');
+    thumb.className = 'photo-thumbnail';
+    const image = document.createElement('img');
+    image.alt = '';
+    image.loading = 'lazy';
+    image.decoding = 'async';
+    image.addEventListener('error', () => image.remove(), { once: true });
+    image.src = '/thumbnail/' + encoded;
+    thumb.append(image);
+    const filename = document.createElement('span');
+    filename.textContent = name;
+    link.append(thumb, filename);
     const size = document.createElement('span');
     size.textContent = bytes < 1_000_000 ? `${Math.ceil(bytes / 1000)} KB` :
       `${(bytes / 1_000_000).toFixed(1)} MB`;
@@ -242,9 +255,9 @@ async function enter() {
   privateStream = admin && streaming;
   camera.hidden = lock.hidden = false;
   unlock.hidden = invite.hidden = true;
-  showAdmin(admin);
-  void refreshPreview();
-  await loadPhotos();
+  const current = generation;
+  await Promise.all([showAdmin(admin), loadPhotos()]);
+  if (current === generation) void refreshPreview();
 }
 void enter().catch(() => {
   locked();

@@ -37,6 +37,7 @@ PORT = int(os.environ.get("PI_CAMERA_PORT", "8765"))
 LAN_PORT = 8766
 LOCK = threading.Lock()
 CONTROL = threading.Lock()
+THUMBNAILS = threading.BoundedSemaphore(2)
 RUST_PREVIEW = None
 SETTINGS = (
     "iso",
@@ -548,22 +549,26 @@ class Handler(BaseHTTPRequestHandler):
                 )
             elif path.startswith("/api/thumbnail/"):
                 item = photo(unquote(path[len("/api/thumbnail/") :]))
-                if item.name.endswith("-framed.jpg"):
-                    with Image.open(item) as image:
-                        image.thumbnail((256, 256))
-                        encoded = io.BytesIO()
-                        image.save(encoded, "JPEG")
-                    self.send(encoded.getvalue(), "image/jpeg")
-                    return
-                result = subprocess.run(
-                    ["exiftool", "-b", "-ThumbnailImage", str(item)],
-                    capture_output=True,
-                    timeout=15,
-                    check=True,
-                )
-                if not result.stdout:
+                with THUMBNAILS:
+                    if item.suffix.lower() in (".jpg", ".jpeg"):
+                        with Image.open(item) as image:
+                            image.draft("RGB", (256, 256))
+                            image.thumbnail((256, 256))
+                            encoded = io.BytesIO()
+                            ImageOps.exif_transpose(image).convert("RGB").save(
+                                encoded, "JPEG"
+                            )
+                        thumbnail = encoded.getvalue()
+                    else:
+                        thumbnail = subprocess.run(
+                            ["exiftool", "-b", "-ThumbnailImage", str(item)],
+                            capture_output=True,
+                            timeout=15,
+                            check=True,
+                        ).stdout
+                if not thumbnail:
                     raise RuntimeError("No embedded thumbnail")
-                self.send(result.stdout, "image/jpeg")
+                self.send(thumbnail, "image/jpeg")
             elif path.startswith("/api/photos/"):
                 item = photo(unquote(path[len("/api/photos/") :]))
                 with item.open("rb") as original:

@@ -11,7 +11,10 @@
   <main>
     <header>
       <h1>Sony Live Camera</h1>
-      <button id="lock" type="button" hidden>Lock</button>
+      <div class="header-actions">
+        <button id="lock" type="button" hidden>Lock</button>
+        <button id="open-admin-menu" type="button" popovertarget="admin-menu" aria-label="Camera administration" hidden><span aria-hidden="true">☰</span></button>
+      </div>
     </header>
     <form id="unlock" hidden>
       <label for="password">Admin password</label>
@@ -28,16 +31,22 @@
         <p id="preview-status" role="status">Waiting for the camera…</p>
       </div>
       <section id="admin" hidden>
-        <h2>Manage camera</h2>
+        <div class="settings-heading">
+          <h2>Camera settings</h2>
+          <button id="refresh-settings" type="button">Refresh</button>
+        </div>
+        <div id="settings"></div>
+        <p id="settings-status" role="status"></p>
+      </section>
+      <section id="admin-menu" popover aria-labelledby="admin-menu-title">
+        <div class="settings-heading">
+          <h2 id="admin-menu-title">Camera administration</h2>
+          <button type="button" popovertarget="admin-menu" popovertargetaction="hide" aria-label="Close administration">Close</button>
+        </div>
         <details>
           <summary>Camera access</summary>
           <button id="show-admin-qr" type="button">Show admin login QR code</button>
           <div id="admin-qr" class="access-qr" role="img" aria-label="QR code for the camera admin login" hidden></div>
-        </details>
-        <details>
-          <summary>Camera settings</summary>
-          <div id="settings"></div>
-          <button id="refresh-settings" type="button">Read settings</button>
         </details>
         <details>
           <summary>Viewer invitations</summary>

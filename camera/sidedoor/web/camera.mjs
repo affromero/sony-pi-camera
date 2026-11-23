@@ -88,7 +88,16 @@ export function createCamera({ port, cameraToken, previewInterval = 2000 }) {
     }
   }
 
-  return { preview, download, json };
+  async function thumbnail(name) {
+    const result = await request('/api/thumbnail/' + encodeURIComponent(name), AbortSignal.timeout(30000));
+    if (!result.ok || result.headers.get('content-type') !== 'image/jpeg') {
+      await result.body?.cancel();
+      return null;
+    }
+    return Buffer.from(await result.arrayBuffer());
+  }
+
+  return { preview, download, json, thumbnail };
 }
 
 export function photoName(encoded) {

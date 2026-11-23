@@ -392,6 +392,20 @@ class CameraTest(unittest.TestCase):
                     r, g, b = saved.getpixel((0, 0))
                     self.assertGreater(g, max(r, b) + 150)
 
+    def test_thumbnail_resizes_an_ordinary_jpeg_and_applies_orientation(self):
+        path = self.home / "camera-photos" / "thumbnail-fixture.jpg"
+        exif = Image.Exif()
+        exif[274] = 6
+        Image.new("RGB", (1600, 800), "red").save(path, exif=exif)
+        self.addCleanup(path.unlink)
+        with self.request(
+            "/api/thumbnail/thumbnail-fixture.jpg", self.token
+        ) as response:
+            self.assertEqual(response.headers.get_content_type(), "image/jpeg")
+            with Image.open(io.BytesIO(response.read())) as image:
+                self.assertEqual(image.size, (128, 256))
+                self.assertIsNone(image.getexif().get(274))
+
     def test_capture_rejects_stale_frame_and_raw_only_before_shutter(self):
         (self.home / "shutter").unlink(missing_ok=True)
         (self.home / "viewport").write_text("Current: 59\nCurrent: 20971734")

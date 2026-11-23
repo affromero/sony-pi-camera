@@ -1,6 +1,8 @@
 const byId = (id) => document.getElementById(id);
 const section = byId('admin');
 const status = byId('admin-status');
+const settingsStatus = byId('settings-status');
+const menu = byId('admin-menu');
 const inviteLink = byId('invite-link');
 const settings = byId('settings');
 const sessions = byId('viewer-sessions');
@@ -9,6 +11,17 @@ const schedule = byId('schedule');
 const scheduleFields = byId('schedule-fields');
 let generation = 0;
 const qrCleanup = new Map();
+const settingLabels = {
+  iso: 'ISO',
+  shutterspeed: 'Shutter speed',
+  'f-number': 'Aperture',
+  whitebalance: 'White balance',
+  focusmode: 'Focus mode',
+  focusarea: 'Focus area',
+  sensorcrop: 'Sensor crop',
+  exposurecompensation: 'Exposure compensation',
+  imagequality: 'Image quality',
+};
 
 function clearQr(container) {
   qrCleanup.get(container)?.();
@@ -46,13 +59,13 @@ async function get(path) {
   return data;
 }
 
-async function act(operation) {
+async function act(operation, message = status) {
   const current = generation;
-  status.textContent = '';
+  message.textContent = '';
   try {
     await operation(current);
   } catch (error) {
-    if (generation === current) status.textContent = error.message;
+    if (generation === current) message.textContent = error.message;
   }
 }
 
@@ -60,12 +73,16 @@ async function loadSettings(current) {
   const data = await get('/settings');
   if (generation !== current) return;
   const fields = [];
-  for (const [name, setting] of Object.entries(data)) {
-    if (typeof setting !== 'object' || !setting.current) continue;
+  for (const [name, title] of Object.entries(settingLabels)) {
+    const setting = data[name];
+    if (!setting || !setting.current) continue;
     const label = document.createElement('label');
-    label.textContent = name === 'f-number' ? 'Aperture' : name;
+    const caption = document.createElement('span');
+    caption.textContent = title;
+    label.append(caption);
     if (setting.readonly || !setting.choices?.length) {
       const value = document.createElement('span');
+      value.className = 'setting-value';
       value.textContent = setting.current;
       label.append(value);
     } else {
@@ -78,7 +95,7 @@ async function loadSettings(current) {
         } finally {
           await loadSettings(active);
         }
-      });
+      }, settingsStatus);
       label.append(select);
     }
     fields.push(label);
@@ -118,28 +135,31 @@ function renderAi(data) {
 export function showAdmin(enabled) {
   const current = ++generation;
   section.hidden = !enabled;
+  byId('open-admin-menu').hidden = !enabled;
   status.textContent = '';
+  settingsStatus.textContent = '';
   if (enabled) {
     void act(async () => {
       const data = await get('/ai');
       if (current === generation) renderAi(data);
     });
-  } else {
-    schedule.reset();
-    scheduleFields.disabled = true;
-    clearQr(byId('admin-qr'));
-    clearQr(byId('invite-qr'));
-    ai.reset();
-    byId('issue').reset();
-    inviteLink.value = '';
-    inviteLink.hidden = inviteLink.labels[0].hidden = true;
-    settings.replaceChildren();
-    sessions.replaceChildren();
-    for (const details of section.querySelectorAll('details')) details.open = false;
+    return act(loadSettings, settingsStatus);
   }
+  menu.hidePopover();
+  schedule.reset();
+  scheduleFields.disabled = true;
+  clearQr(byId('admin-qr'));
+  clearQr(byId('invite-qr'));
+  ai.reset();
+  byId('issue').reset();
+  inviteLink.value = '';
+  inviteLink.hidden = inviteLink.labels[0].hidden = true;
+  settings.replaceChildren();
+  sessions.replaceChildren();
+  for (const details of menu.querySelectorAll('details')) details.open = false;
 }
 
-byId('refresh-settings').onclick = () => act(loadSettings);
+byId('refresh-settings').onclick = () => act(loadSettings, settingsStatus);
 function showSchedule(data) {
   byId('schedule-enabled').checked = data.enabled;
   byId('schedule-times').value = data.times.join(', ');
