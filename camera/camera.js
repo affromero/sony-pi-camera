@@ -1,4 +1,19 @@
 const $ = id => document.getElementById(id);
+for (const [id, hint] of Object.entries({
+  'mag-select': 'Drag over the live preview to choose an area to magnify',
+  'mag-exit': 'Exit magnification and show the full camera frame',
+  'mag-level': 'Current camera magnification',
+  'capture-schedule': 'Choose when the camera takes photos automatically',
+  'schedule-add': 'Add another daily capture time',
+  'schedule-retry': 'Try to load the saved schedule again',
+  'photo-from': 'Show photos saved on or after this date',
+  'photo-through': 'Show photos saved on or before this date',
+  'photo-sort': 'Choose whether newer or older photos come first',
+  'modal-zoom': 'Switch between fitting the photo and viewing it at full size',
+  'modal-download': 'Download the original photo file',
+  'modal-delete': 'Delete this saved copy from the Pi',
+  'modal-close': 'Return to the photo gallery',
+})) $(id).title = hint;
 const sidedoor = document.body.hasAttribute('data-sidedoor');
 let token = sidedoor ? '' : location.hash.slice(1) || sessionStorage.getItem('camera-token');
 const connected = () => sidedoor || Boolean(token);
@@ -457,13 +472,13 @@ function renderPhotos() {
       const item = document.createElement('div'); item.className = 'photo';
       const thumb = document.createElement('img'); thumb.alt = ''; thumb.loading = 'lazy';
       api(`/api/thumbnail/${encodeURIComponent(name)}`).then(r => r.blob()).then(blob => { if (thumb.isConnected) thumb.src = URL.createObjectURL(blob); }).catch(() => { thumb.remove(); });
-      const view = document.createElement('button'); view.className = 'photo-view'; view.setAttribute('aria-label', `Open ${name} at full resolution`); view.append(thumb);
+      const view = document.createElement('button'); view.className = 'photo-view'; view.title = 'Open this photo at full resolution'; view.setAttribute('aria-label', `Open ${name} at full resolution`); view.append(thumb);
       view.onclick = () => openPhoto(name, bytes);
       const filename = document.createElement('div'); filename.className = 'photo-name'; filename.textContent = name.split('/').pop();
       const date = new Date(saved * 1000);
       const time = document.createElement('time'); time.dateTime = date.toISOString(); time.textContent = 'Saved ' + stamp.format(date);
-      const download = document.createElement('button'); download.textContent = 'Download'; download.onclick = () => downloadPhoto(name).catch(error => { $('status').textContent = error.message; });
-      const remove = document.createElement('button'); remove.className = 'delete'; remove.textContent = 'Delete'; remove.onclick = async () => { if (confirm(`Delete ${name} from the Pi?`)) { try { await post('/api/delete',{name}); await photos(); } catch (error) { $('status').textContent = error.message; } } };
+      const download = document.createElement('button'); download.textContent = 'Download'; download.title = 'Download the original photo file'; download.onclick = () => downloadPhoto(name).catch(error => { $('status').textContent = error.message; });
+      const remove = document.createElement('button'); remove.className = 'delete'; remove.textContent = 'Delete'; remove.title = 'Delete this saved copy from the Pi'; remove.onclick = async () => { if (confirm(`Delete ${name} from the Pi?`)) { try { await post('/api/delete',{name}); await photos(); } catch (error) { $('status').textContent = error.message; } } };
       const size = document.createElement('small'); size.textContent = fileSize(bytes);
       item.append(view,filename,time,size,document.createElement('br'),download,remove); grid.append(item);
     }
@@ -508,6 +523,7 @@ function addScheduleTime(value = '') {
   label.append(input);
   const remove = document.createElement('button');
   remove.type = 'button';
+  remove.title = 'Remove this time from the capture schedule';
   remove.className = 'secondary';
   remove.textContent = 'Remove';
   remove.onclick = () => { row.remove(); scheduleEdited(); };

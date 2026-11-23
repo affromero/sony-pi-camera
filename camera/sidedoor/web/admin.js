@@ -119,6 +119,7 @@ async function loadSessions(current) {
   const rows = data.sessions.filter(({ principalId, admission }) =>
     principalId === null && admission === 'invitation').map(({ id, expiresAt }) => {
     const button = document.createElement('button');
+    button.title = 'Sign this viewer out on their device';
     button.textContent = 'Revoke viewer expiring ' + new Date(expiresAt).toLocaleString();
     button.onclick = () => act(async (active) => {
       await post('/access/revoke-session', { id });

@@ -67,8 +67,10 @@ session. Use the service journal to inspect USB errors.
 For a continuous preview on the private admin page, add
 `PRIVATE_PREVIEW_STREAM=1` to `/etc/sony-pi-viewer-$USER.conf` and restart
 `sony-pi-viewer@$USER.service`. The stream uses camera JPEGs at up to 10 fps.
-Disable response buffering on the private proxy. Invited viewers retain
-the existing snapshot refresh interval.
+Disable response buffering on the private proxy. Set `VIEWER_PREVIEW_STREAM=1`
+in the same file and restart the viewer to stream to family and invited viewers.
+Up to three sessions share the preview stream. The viewer uses snapshots if the
+stream is unavailable.
 
 ### Compare USB preview backends
 

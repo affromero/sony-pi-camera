@@ -12,18 +12,18 @@
     <header>
       <h1>Sony Live Camera</h1>
       <div class="header-actions">
-        <button id="lock" type="button" hidden>Lock</button>
-        <button id="open-admin-menu" type="button" popovertarget="admin-menu" aria-label="Camera administration" hidden><span aria-hidden="true">☰</span></button>
+        <button id="lock" type="button" title="End your camera session on this device" hidden>Sign out</button>
+        <button id="open-admin-menu" type="button" popovertarget="admin-menu" aria-label="Camera administration" title="Manage access, capture schedules and AI advice" hidden><span aria-hidden="true">☰</span></button>
       </div>
     </header>
     <form id="unlock" hidden>
       <label for="password" id="password-label">Admin password</label>
       <input id="password" name="password" type="password" autocomplete="current-password" maxlength="256" required>
-      <button type="submit" id="login-admin">Open as admin</button>
-      <button type="submit" id="login-family" hidden>Open as family</button>
+      <button type="submit" id="login-admin" title="Sign in to use camera controls and manage access">Open as admin</button>
+      <button type="submit" id="login-family" title="Sign in to view the live camera and saved photos" hidden>Open as family</button>
     </form>
     <form id="invite" hidden>
-      <button type="submit">Accept camera invitation</button>
+      <button type="submit" title="Use this invitation to open the live camera and gallery">Accept camera invitation</button>
     </form>
     <p id="status" role="status"></p>
     <section id="camera" hidden>
@@ -48,20 +48,20 @@
       <section id="admin-menu" popover aria-labelledby="admin-menu-title">
         <div class="settings-heading">
           <h2 id="admin-menu-title">Camera administration</h2>
-          <button type="button" popovertarget="admin-menu" popovertargetaction="hide" aria-label="Close administration">Close</button>
+          <button type="button" popovertarget="admin-menu" popovertargetaction="hide" aria-label="Close administration" title="Dismiss this menu">Close</button>
         </div>
-        <p><a href="/controls">Back to camera controls</a></p>
+        <p><a href="/controls" title="Return to the live preview and camera controls">Back to camera controls</a></p>
         <details>
-          <summary>Camera access</summary>
-          <button id="show-admin-qr" type="button">Show admin login QR code</button>
+          <summary title="Share the camera admin sign-in page">Camera access</summary>
+          <button id="show-admin-qr" type="button" title="Show a scannable link to the admin password prompt">Show admin login QR code</button>
           <div id="admin-qr" class="access-qr" role="img" aria-label="QR code for the camera admin login" hidden></div>
         </details>
         <details>
-          <summary>Viewer invitations</summary>
+          <summary title="Invite a viewer or revoke an existing viewer session">Viewer invitations</summary>
           <form id="issue">
             <label for="confirm-password">Admin password</label>
             <input id="confirm-password" type="password" autocomplete="current-password" required>
-            <button type="submit">Create single-use invitation</button>
+            <button type="submit" title="Create a link and QR code one viewer can redeem">Create single-use invitation</button>
             <label for="invite-link" hidden>Invitation link</label>
             <input id="invite-link" type="text" readonly hidden>
             <div id="invite-qr" class="access-qr" role="img" aria-label="QR code for the single-use viewer invitation" hidden></div>
@@ -69,7 +69,7 @@
           <div id="viewer-sessions"></div>
         </details>
         <details>
-          <summary>Scheduled captures</summary>
+          <summary title="Choose when the camera takes photos automatically">Scheduled captures</summary>
           <form id="schedule">
             <fieldset id="schedule-fields" disabled>
               <label><input id="schedule-enabled" type="checkbox"> Enable daily captures</label>
@@ -77,12 +77,12 @@
               <input id="schedule-times" type="text" placeholder="08:00, 17:30" required>
               <label for="schedule-zone">Time zone</label>
               <input id="schedule-zone" type="text" placeholder="America/Chicago" required>
-              <button type="submit">Save schedule</button>
+              <button type="submit" title="Apply the selected capture times and time zone">Save schedule</button>
             </fieldset>
           </form>
         </details>
         <details>
-          <summary>AI advice for scheduled captures</summary>
+          <summary title="Choose how a vision model advises the camera before a shot">AI advice for scheduled captures</summary>
           <form id="ai">
             <label><input id="ai-enabled" type="checkbox"> Analyze a preview before each scheduled shot</label>
             <label><input id="ai-required" type="checkbox"> Require AI advice before capture</label>
@@ -94,8 +94,8 @@
             <input id="ai-key" type="password" maxlength="4096" autocomplete="off">
             <label for="ai-prompt">Photo goal</label>
             <textarea id="ai-prompt" maxlength="2000" rows="4"></textarea>
-            <button type="submit">Save AI settings</button>
-            <button id="check-ai" type="button">Check saved API key</button>
+            <button type="submit" title="Save the provider, model and photo goal">Save AI settings</button>
+            <button id="check-ai" type="button" title="Check whether the provider accepts the saved credential">Check saved API key</button>
           </form>
         </details>
         <p id="admin-status" role="status"></p>
@@ -110,8 +110,8 @@
     <dialog id="photo-dialog" aria-labelledby="photo-title">
       <div class="photo-dialog-header">
         <h2 id="photo-title"></h2>
-        <a id="photo-download" download>Download</a>
-        <form method="dialog"><button type="submit" autofocus>Close</button></form>
+        <a id="photo-download" title="Download the original photo file" download>Download</a>
+        <form method="dialog"><button type="submit" title="Close this photo and return to the gallery" autofocus>Close</button></form>
       </div>
       <div class="photo-dialog-image">
         <img id="photo-full" alt="" hidden>

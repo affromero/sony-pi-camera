@@ -31,7 +31,8 @@ let photoUrl;
 let timer;
 let imageUrl;
 let admin = false;
-let privateStream = false;
+let liveStream = false;
+let streamRetryAt = 0;
 let streamRequest;
 let inviteCode = new URLSearchParams(location.hash.slice(1)).get('invite');
 if (inviteCode) history.replaceState(null, '', location.pathname);
@@ -58,7 +59,8 @@ function locked() {
   if (unlock.hidden && !inviteCode && guestPage)
     status.textContent = 'Open the invitation link from the camera owner.';
   admin = false;
-  privateStream = false;
+  liveStream = false;
+  streamRetryAt = 0;
   showAdmin(false);
 }
 
@@ -99,6 +101,7 @@ async function openPhoto(name, encoded, bytes) {
   photoLoading.hidden = false;
   showPhotoProgress(0, original ? bytes : 0);
   photoDialog.showModal();
+  void refreshPreview();
   try {
     const response = await fetch((original ? '/photo/' : '/thumbnail/') + encoded, {signal: request.signal});
     if (!response.ok) throw new Error('Photo request failed');
@@ -138,6 +141,7 @@ photoDialog.addEventListener('close', () => {
   if (photoDialog.open) return;
   clearPhoto();
   byId('photo-download').removeAttribute('href');
+  void refreshPreview();
 });
 photoDialog.addEventListener('click', (event) => {
   if (event.target === photoDialog) photoDialog.close();
@@ -151,6 +155,7 @@ function renderPhotos(entries) {
     link.type = 'button';
     link.onclick = () => openPhoto(name, encoded, bytes);
     link.className = 'photo-link';
+    link.title = 'Open this photo in the viewer';
     const thumb = document.createElement('span');
     thumb.className = 'photo-thumbnail';
     const image = document.createElement('img');
@@ -172,6 +177,7 @@ function renderPhotos(entries) {
       const remove = document.createElement('button');
       remove.type = 'button';
       remove.textContent = 'Delete';
+      remove.title = 'Delete this saved copy from the Pi';
       remove.setAttribute('aria-label', 'Delete ' + name);
       remove.onclick = async () => {
         if (!confirm('Delete ' + name + ' from the Pi?')) return;
@@ -252,13 +258,14 @@ async function refreshPreview() {
   clearTimeout(timer);
   streamRequest?.abort();
   const current = ++generation;
-  if (document.hidden || camera.hidden) return;
+  if (document.hidden || camera.hidden || photoDialog.open) return;
+  const streaming = liveStream && performance.now() >= streamRetryAt;
   try {
-    if (privateStream) {
+    if (streaming) {
       streamRequest = new AbortController();
       const response = await fetch('/stream', { signal: streamRequest.signal });
       if (current !== generation) return;
-      if (response.status === 401) return locked();
+      if (response.status === 401 || response.status === 403) return locked();
       if (!response.ok || !response.body) throw new Error();
       for await (const frame of streamFrames(response.body)) {
         if (current !== generation) return;
@@ -268,19 +275,19 @@ async function refreshPreview() {
     }
     const response = await fetch('/preview');
     if (current !== generation) return;
-    if (response.status === 401) return locked();
+    if (response.status === 401 || response.status === 403) return locked();
     if (!response.ok) throw new Error();
     const blob = await response.blob();
     if (current !== generation) return;
     showFrame(blob);
   } catch {
     if (current === generation) {
-      previewStatus.textContent = privateStream ? 'Live stream interrupted. Reconnecting…' :
-        preview.hidden ? 'Preview unavailable.' : 'Showing the last frame.';
+      if (streaming) streamRetryAt = performance.now() + 15000;
+      previewStatus.textContent = preview.hidden ? 'Preview unavailable. Reconnecting…' : 'Showing the last frame.';
       previewStatus.hidden = false;
     }
   } finally {
-    if (current === generation) timer = setTimeout(refreshPreview, 2500);
+    if (current === generation) timer = setTimeout(refreshPreview, streaming ? 250 : 2500);
   }
 }
 
@@ -346,7 +353,7 @@ lock.addEventListener('click', async () => {
     status.textContent = '';
     locked();
   } catch {
-    status.textContent = 'Could not lock the viewer. Try again.';
+    status.textContent = 'Could not sign out. Try again.';
   }
 });
 captureButton.addEventListener('click', async () => {
@@ -374,13 +381,13 @@ setInterval(syncGallery, 15000);
 async function enter() {
   const response = await fetch('/session');
   if (!response.ok) return locked();
-  const { role, privateStream: streaming } = await response.json();
+  const { role, privateStream, viewerStream } = await response.json();
   admin = role === 'admin';
   if (admin && location.search !== '?manage=1') {
     location.replace('/controls');
     return;
   }
-  privateStream = admin && streaming;
+  liveStream = Boolean(privateStream || viewerStream);
   camera.hidden = lock.hidden = false;
   captureButton.hidden = !admin;
   unlock.hidden = invite.hidden = true;

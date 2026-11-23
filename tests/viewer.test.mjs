@@ -104,6 +104,37 @@ test('serves admins and read-only invitees on the same hostname', { timeout: 800
   assert.equal((await post('/access/issue-invitation', {}, viewer.cookie)).status, 403);
 });
 
+test('streams the preview to authorized family viewers and limits concurrent streams', { timeout: 8000 }, async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'sony-camera-stream-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await initializeAdmin(directory, password);
+  const familyPassword = 'separate-family-password';
+  await initializeFamily(directory, familyPassword);
+  const camera = { async preview() { return Buffer.from([0xff, 0xd8, 0xff, 0xd9]); } };
+  const viewer = await createViewer({ origin, directory, camera, mode: 'guest', viewerStream: true });
+  t.after(() => viewer.close());
+  const port = await listen(viewer);
+  assert.equal((await call(port, '/stream')).status, 401);
+  const family = await call(port, '/access/family-login', { method: 'POST', body: { password: familyPassword } });
+  assert.equal((await call(port, '/session', { cookie: family.cookie })).data.viewerStream, true);
+  const streams = [];
+  t.after(() => streams.forEach((stream) => stream.destroy()));
+  for (let i = 0; i < 3; i++) {
+    const response = await new Promise((resolve, reject) => {
+      const outgoing = request({ host: '127.0.0.1', port, path: '/stream',
+        headers: { Host: 'camera.example.test', Cookie: family.cookie } }, resolve);
+      outgoing.on('error', reject);
+      outgoing.end();
+    });
+    streams.push(response);
+    assert.equal(response.statusCode, 200);
+    assert.match(response.headers['content-type'], /multipart\/x-mixed-replace/);
+  }
+  assert.equal((await call(port, '/stream', { cookie: family.cookie })).status, 429);
+  assert.equal((await call(port, '/settings', { cookie: family.cookie })).status, 404);
+  streams.forEach((stream) => stream.destroy());
+});
+
 test('keeps viewer invitations read-only and admin AI credentials private', { timeout: 8000 }, async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'sony-camera-test-'));
   let deleted = false;

@@ -8,8 +8,8 @@
 <path d="M30 5q4 3 0 6z" fill="currentColor"/></svg>
 <div><strong id="battery-level">Unavailable</strong><small id="battery-state"></small></div></div>
 <div class="sidedoor-actions">
-<button type="button" id="controls-lock">Lock</button>
-<a href="/?manage=1" aria-label="Camera administration" title="Camera administration">☰</a>
+<button type="button" id="controls-lock" title="End your camera session on this device">Sign out</button>
+<a href="/?manage=1" aria-label="Camera administration" title="Manage access, capture schedules and AI advice">☰</a>
 </div></header>
 <div id="login" class="login" hidden><form id="login-form"><h1>Camera access</h1><p>Enter the camera access key for this Pi.</p><label>Access key <input id="access-key" type="password" required autocomplete="off"></label><button type="submit">Open camera</button><p id="login-error" role="alert"></p></form></div>
 <main><div class="heading"><div><p>SONY α7 III</p><h1>Camera</h1></div><span id="status" role="status">Connecting…</span></div>
@@ -27,7 +27,7 @@
 <button class="secondary" type="button" id="schedule-add">Add time</button>
 <label>Time zone <input id="schedule-zone" list="schedule-zones" required placeholder="America/Chicago"></label>
 <datalist id="schedule-zones"></datalist>
-<button class="secondary" type="submit">Save schedule</button>
+<button class="secondary" type="submit" title="Apply the selected daily capture times and time zone">Save schedule</button>
 </fieldset></form><p role="status" id="schedule-status"></p>
 <button class="secondary" id="schedule-retry" hidden>Retry loading schedule</button></details>
 <section class="library"><h2>Photos on the Pi</h2>

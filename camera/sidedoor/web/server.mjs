@@ -17,6 +17,7 @@ import { sendPreviewStream } from './stream.mjs';
 const cookieName = '__Host-sony-viewer';
 const ownerName = 'Camera admin';
 const familyName = 'Camera family';
+const activeStreams = new WeakMap();
 const hourMs = 60 * 60 * 1000;
 const assets = new Map(await Promise.all([
   ['/', 'index.html', 'text/html; charset=utf-8'],
@@ -111,7 +112,7 @@ export async function initializeFamily(directory, password) {
 }
 
 export async function createViewer({ origin, directory, mode = 'admin', inviteOrigin = origin, camera,
-  privateStream = false }) {
+  privateStream = false, viewerStream = false }) {
   const guest = mode === 'guest';
   const shared = mode === 'shared';
   const publicUrl = new URL(origin);
@@ -222,6 +223,7 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
     const photoRoute = request.method === 'GET' && /^\/(thumbnail|photo|download)\/([^/?]+)$/.exec(path);
     if (guest && !(request.method === 'GET' && (
       ['/', '/viewer.css', '/viewer.js', '/admin.js', '/session', '/photos', '/preview'].includes(path) ||
+      (viewerStream && path === '/stream') ||
       photoRoute
     )) && !(request.method === 'POST' && ['/access/redeem-invitation', '/access/family-login', '/access/logout'].includes(path)))
       return send(response, 404, { error: 'Not found.' });
@@ -264,13 +266,23 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
     }
     if (route === 'GET /session') {
       const session = await authenticate(request, false);
-      return send(response, 200, { ...session, privateStream: session.role === 'admin' && privateStream });
+      return send(response, 200, {
+        ...session, privateStream: session.role === 'admin' && privateStream,
+        ...(viewerStream ? { viewerStream: true } : {}),
+      });
     }
-    if (route === 'GET /stream' && privateStream) {
-      const authorize = () => authenticate(request, true);
+    if (route === 'GET /stream' && (privateStream || viewerStream)) {
+      const authorize = () => authenticate(request, !viewerStream);
       await authorize();
-      if (!await sendPreviewStream(response, camera, authorize))
-        send(response, 503, { error: 'Rust preview stream unavailable.' });
+      const count = activeStreams.get(camera) ?? 0;
+      if (count >= 3) return send(response, 429, { error: 'Camera streams are busy.' });
+      activeStreams.set(camera, count + 1);
+      try {
+        if (!await sendPreviewStream(response, camera, authorize))
+          send(response, 503, { error: 'Rust preview stream unavailable.' });
+      } finally {
+        activeStreams.set(camera, activeStreams.get(camera) - 1);
+      }
       return;
     }
     if (route === 'POST /ai/check') {
@@ -348,7 +360,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         privateStream: process.env.PRIVATE_PREVIEW_STREAM === '1' });
       admin.listen(join(process.env.RUNTIME_DIRECTORY, 'admin.sock'));
     }
-    const broker = await createViewer({ ...options, origin: viewerOrigin, mode: shared ? 'shared' : 'guest' });
+    const broker = await createViewer({ ...options, origin: viewerOrigin, mode: shared ? 'shared' : 'guest',
+      viewerStream: process.env.VIEWER_PREVIEW_STREAM === '1' });
     const brokerPath = join(process.env.RUNTIME_DIRECTORY, 'guest.sock');
     broker.listen(brokerPath, async () => { await chmod(brokerPath, 0o660); });
   }
