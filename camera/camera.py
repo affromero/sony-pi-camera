@@ -108,18 +108,17 @@ def setting(name, mode=None):
 
 
 def set_setting(name, value):
-    command("--set-config-value", f"{name}={value}")
-    # Sony can acknowledge a write before publishing the updated value.
-    deadline = time.monotonic() + 2
-    while True:
-        actual = setting(name).get("current")
-        if actual == value:
-            return
-        if time.monotonic() >= deadline:
-            raise RuntimeError(
-                f"Camera reports {actual} after requesting {value}"
-            )
-        time.sleep(0.2)
+    if RUST_PREVIEW is None:
+        raise RuntimeError("Rust camera backend has not been initialized")
+
+    def validate(output):
+        mode_config, setting_config, _ = output.split("\nEND\n")
+        mode = parse_setting("expprogram", mode_config).get("current")
+        current = parse_setting(name, setting_config, mode)
+        if current.get("readonly") or value not in current["choices"]:
+            raise ValueError("Setting is unavailable")
+
+    return RUST_PREVIEW.update_setting(name, value, validate)
 
 
 def parse_setting(name, output, mode=None):
@@ -636,15 +635,8 @@ class Handler(BaseHTTPRequestHandler):
                 if name not in SETTINGS or not isinstance(value, str):
                     raise ValueError("Invalid setting")
                 with camera_control():
-                    mode = setting("expprogram").get("current")
-                    current = setting(name, mode)
-                    if (
-                        current.get("readonly")
-                        or value not in current["choices"]
-                    ):
-                        raise ValueError("Setting is unavailable")
-                    set_setting(name, value)
-                self.send({"ok": True})
+                    actual = set_setting(name, value)
+                self.send({"ok": True, "current": actual})
             elif path == "/api/delete":
                 photo(data["name"]).unlink()
                 self.send({"ok": True})

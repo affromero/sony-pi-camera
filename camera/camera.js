@@ -398,14 +398,15 @@ async function settings() {
           await withCamera('Updating ' + label + '…', async () => {
             feedback.textContent = '';
             try {
-              await post('/api/setting', {name, value:requested});
+              const {current} = await (await post('/api/setting', {name, value:requested})).json();
+              select.value = current;
+              select.dataset.confirmed = current;
             } catch (error) {
               feedback.textContent = label + ' change failed. ' + error.message;
               if (name === 'focusmode' && requested !== 'Manual' && error.message.includes('reports Manual')) {
                 feedback.textContent += '. Check that the AF/MF switch on the lens is set to AF.';
               }
             }
-            if (!externalBusy) await settings();
           });
         });
         wrapper.append(select, feedback); $('settings').append(wrapper);

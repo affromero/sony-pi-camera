@@ -194,11 +194,12 @@ impl Camera {
     }
 
     pub(crate) fn config_number(&self, name: &CStr) -> io::Result<u32> {
+        self.config_value(name)?.parse().map_err(io::Error::other)
+    }
+
+    pub(crate) fn config_value(&self, name: &CStr) -> io::Result<String> {
         let widget = self.widget(name)?;
-        widget
-            .value(widget.kind()?)?
-            .parse()
-            .map_err(io::Error::other)
+        widget.value(widget.kind()?)
     }
 
     pub(crate) fn print_config(&self, name: &CStr) -> io::Result<()> {

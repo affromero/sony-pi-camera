@@ -25,22 +25,20 @@ SCHEDULE = SERVER.with_name("scheduled_capture.py")
 
 
 class ApertureTest(unittest.TestCase):
-    def test_setting_waits_for_the_camera_to_publish_its_new_value(self):
-        writes = []
-        replies = iter(("64", "100"))
+    def test_setting_rejects_shutter_changes_in_aperture_priority(self):
+        worker = mock.Mock()
 
-        def usb(action, argument):
-            if action == "--set-config-value":
-                writes.append(argument)
-                return ""
-            return f"Current: {next(replies)}"
+        def usb(name, value, validate):
+            validate(
+                "Current: A\nEND\n"
+                "Current: 1/200\nReadonly: 0\nChoice: 0 1/250\nEND\n"
+            )
+            return value
 
-        with (
-            mock.patch.object(camera, "command", side_effect=usb),
-            mock.patch.object(camera.time, "sleep"),
-        ):
-            camera.set_setting("iso", "100")
-        self.assertEqual(writes, ["iso=100"])
+        worker.update_setting.side_effect = usb
+        with mock.patch.object(camera, "RUST_PREVIEW", worker):
+            with self.assertRaisesRegex(ValueError, "Setting is unavailable"):
+                camera.set_setting("shutterspeed", "1/250")
 
     def test_region_uses_native_levels_and_reports_measured_center(self):
         ratio, x, y = 0, 320, 214

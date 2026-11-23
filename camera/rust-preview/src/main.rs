@@ -135,7 +135,40 @@ fn main() -> io::Result<()> {
                 .ok_or_else(|| io::Error::other("Probe frame count must be between 1 and 200"))?;
             probe(count)
         }
+        [mode, name, value] if mode == "--update-setting" => {
+            update_setting(&CString::new(name.as_str())?, value)
+        }
         _ => camera_command(&args),
+    }
+}
+
+fn update_setting(name: &std::ffi::CStr, value: &str) -> io::Result<()> {
+    let camera = Camera::open()?;
+    camera.print_config(c"expprogram")?;
+    camera.print_config(name)?;
+    io::stdout().flush()?;
+    // Python validates the current mode and available choices before approving.
+    let mut approval = [0];
+    if io::stdin().read(&mut approval)? == 0 {
+        return Ok(());
+    }
+    if approval != [b'Y'] {
+        return Err(io::Error::other("Invalid setting approval"));
+    }
+    camera.set_config(name, value)?;
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        let actual = camera.config_value(name)?;
+        if actual == value {
+            println!("{actual}");
+            return Ok(());
+        }
+        if Instant::now() >= deadline {
+            return Err(io::Error::other(format!(
+                "Camera reports {actual} after requesting {value}"
+            )));
+        }
+        thread::sleep(Duration::from_millis(200));
     }
 }
 

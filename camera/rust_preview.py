@@ -5,6 +5,7 @@ import selectors
 import struct
 import subprocess
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 HEADER = struct.Struct("<III")
@@ -39,6 +40,65 @@ class RustPreview:
             if process.poll() is not None:
                 process.stdout.close()
                 self.process = None
+
+    def update_setting(
+        self, name: str, value: str, validate: Callable[[str], None]
+    ) -> str:
+        self.stop()
+        with subprocess.Popen(
+            [self.executable, "--update-setting", name, value],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=0,
+        ) as process:
+            assert process.stdin is not None and process.stdout is not None
+            try:
+                deadline = time.monotonic() + self.timeout
+                data = bytearray()
+                fd = process.stdout.fileno()
+                with selectors.DefaultSelector() as selector:
+                    selector.register(fd, selectors.EVENT_READ)
+                    while data.count(b"\nEND\n") < 2:
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0 or not selector.select(remaining):
+                            raise TimeoutError("Camera setting read timed out")
+                        chunk = os.read(fd, 4096)
+                        if not chunk:
+                            _, error = process.communicate(timeout=2)
+                            raise RuntimeError(
+                                error.decode().strip()[-1000:]
+                                or "Camera did not report its settings"
+                            )
+                        data.extend(chunk)
+                        if len(data) > 65536:
+                            raise RuntimeError(
+                                "Camera settings exceeded the limit"
+                            )
+                validate(data.decode())
+                confirmed, error = process.communicate(
+                    input=b"Y", timeout=self.timeout
+                )
+                if process.returncode:
+                    raise RuntimeError(error.decode().strip()[-1000:])
+                actual = confirmed.decode().rstrip("\n")
+                if actual != value:
+                    raise RuntimeError(
+                        "Camera did not confirm the new setting"
+                    )
+                return actual
+            except subprocess.TimeoutExpired as error:
+                raise TimeoutError(
+                    "Camera setting change timed out"
+                ) from error
+            finally:
+                if not process.stdin.closed:
+                    process.stdin.close()
+                if process.poll() is None:
+                    try:
+                        process.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
 
     def frame(self) -> tuple[bytes, int, int]:
         if self.process is None:

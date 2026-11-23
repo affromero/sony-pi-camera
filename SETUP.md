@@ -130,6 +130,8 @@ Sign in as admin and create a link under **Viewer invitations**. Share the link 
 
 After admin sign-in, the shared site opens the same camera controls used on the Pi. Use the menu at the top right to manage invitations and AI advice.
 
+To add a reusable family password, run the viewer's `setup-family` command with the same state directory as the admin setup and supply a separate password on stdin. Restart the viewer afterward. **Open as family** gives access to the live preview and gallery.
+
 
 ## Daily photos
 

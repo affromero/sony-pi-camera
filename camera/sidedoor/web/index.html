@@ -17,9 +17,10 @@
       </div>
     </header>
     <form id="unlock" hidden>
-      <label for="password">Admin password</label>
+      <label for="password" id="password-label">Admin password</label>
       <input id="password" name="password" type="password" autocomplete="current-password" maxlength="256" required>
-      <button type="submit">Open as admin</button>
+      <button type="submit" id="login-admin">Open as admin</button>
+      <button type="submit" id="login-family" hidden>Open as family</button>
     </form>
     <form id="invite" hidden>
       <button type="submit">Accept camera invitation</button>

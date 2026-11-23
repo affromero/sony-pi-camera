@@ -14,6 +14,13 @@ const captureStatus = byId('capture-status');
 const photoDialog = byId('photo-dialog');
 const photoFull = byId('photo-full');
 const photoStatus = byId('photo-status');
+const familyLogin = document.body.hasAttribute('data-family');
+const guestPage = document.body.hasAttribute('data-guest');
+const adminButton = byId('login-admin');
+const familyButton = byId('login-family');
+adminButton.hidden = guestPage;
+familyButton.hidden = !familyLogin;
+if (familyLogin) byId('password-label').textContent = 'Camera password';
 let generation = 0;
 let galleryRequest = 0;
 let gallerySnapshot = '';
@@ -43,8 +50,8 @@ function locked() {
   captureButton.hidden = true;
   captureStatus.textContent = '';
   invite.hidden = !inviteCode;
-  unlock.hidden = Boolean(inviteCode) || document.body.hasAttribute('data-guest');
-  if (unlock.hidden && !inviteCode && document.body.hasAttribute('data-guest'))
+  unlock.hidden = Boolean(inviteCode) || (guestPage && !familyLogin);
+  if (unlock.hidden && !inviteCode && guestPage)
     status.textContent = 'Open the invitation link from the camera owner.';
   admin = false;
   privateStream = false;
@@ -247,17 +254,17 @@ async function loadPhotos() {
 unlock.addEventListener('submit', async (event) => {
   event.preventDefault();
   const password = byId('password');
-  const button = unlock.querySelector('button');
-  button.disabled = true;
+  const family = event.submitter === familyButton || guestPage;
+  adminButton.disabled = familyButton.disabled = true;
   try {
-    await post('/access/login', { password: password.value });
+    await post(family ? '/access/family-login' : '/access/login', { password: password.value });
     unlock.reset();
     await enter();
   } catch (error) {
-    status.textContent = error.status === 401 ? 'Check the admin password.' :
+    status.textContent = error.status === 401 ? (family ? 'Check the family password.' : 'Check the admin password.') :
       error.status === 429 ? 'Too many attempts. Try again later.' : 'Could not open the viewer.';
   } finally {
-    button.disabled = false;
+    adminButton.disabled = familyButton.disabled = false;
   }
 });
 

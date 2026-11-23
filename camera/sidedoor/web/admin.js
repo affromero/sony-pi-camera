@@ -93,11 +93,17 @@ async function loadSettings(current) {
       caption.htmlFor = select.id;
       const choices = [...new Set([setting.current, ...setting.choices])];
       select.append(...choices.map((value) => new Option(value, value, false, value === setting.current)));
-      select.onchange = () => act(async (active) => {
+      let confirmed = setting.current;
+      select.onchange = () => act(async () => {
+        const value = select.value;
+        select.value = confirmed;
+        select.disabled = true;
         try {
-          await post('/setting', { name, value: select.value });
+          const result = await post('/setting', { name, value });
+          confirmed = result.current;
+          select.value = confirmed;
         } finally {
-          await loadSettings(active);
+          select.disabled = false;
         }
       }, settingsStatus);
       row.append(select);

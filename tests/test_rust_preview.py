@@ -31,6 +31,30 @@ class RustPreviewTest(unittest.TestCase):
         self.addCleanup(worker.stop)
         return worker
 
+    def test_setting_write_requires_approval_and_returns_readback(self):
+        worker = self.start_worker(
+            "assert sys.argv[1:] == ['--update-setting', 'iso', '100']\n"
+            "print('Current: M\\nEND\\nCurrent: 64\\n'"
+            "'Choice: 0 100\\nEND', flush=True)\n"
+            "if sys.stdin.buffer.read(1) == b'Y':\n"
+            "    receipt.write_text('100')\n"
+            "    print('100')\n"
+        )
+
+        def deny(output):
+            raise ValueError("unavailable")
+
+        with self.assertRaisesRegex(ValueError, "unavailable"):
+            worker.update_setting("iso", "100", deny)
+        self.assertFalse((self.root / "released").exists())
+
+        def approve(output):
+            self.assertIn("Current: 64", output)
+            self.assertFalse((self.root / "released").exists())
+
+        self.assertEqual(worker.update_setting("iso", "100", approve), "100")
+        self.assertEqual((self.root / "released").read_text(), "100")
+
     def test_reuses_preview_session_and_releases_it_before_settings(self):
         worker = self.start_worker(
             "sequence = 0\n"

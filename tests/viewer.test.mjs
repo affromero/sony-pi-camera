@@ -4,7 +4,7 @@ import { createServer, request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { createViewer, initializeAdmin } from '../camera/sidedoor/web/server.mjs';
+import { createViewer, initializeAdmin, initializeFamily } from '../camera/sidedoor/web/server.mjs';
 import { createCamera } from '../camera/sidedoor/web/camera.mjs';
 import { createRelay } from '../camera/sidedoor/web/relay.mjs';
 
@@ -41,6 +41,9 @@ function call(port, path, { method = 'GET', body, cookie, site = origin, host = 
 test('serves admins and read-only invitees on the same hostname', { timeout: 8000 }, async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'sony-camera-shared-'));
   await initializeAdmin(directory, password);
+  const familyPassword = 'separate-family-password';
+  await assert.rejects(initializeFamily(directory, password), /separate family password/);
+  assert.equal(await initializeFamily(directory, familyPassword), true);
   let schedule = { enabled: false, times: ['08:00'], timezone: 'UTC' };
   const camera = {
     async json(path, body) {
@@ -68,6 +71,14 @@ test('serves admins and read-only invitees on the same hostname', { timeout: 800
   assert.equal(owner.status, 200);
   assert.equal((await get('/session', owner.cookie)).data.role, 'admin');
   assert.equal((await get('/ai', owner.cookie)).status, 200);
+  assert.equal((await post('/access/login', { password: familyPassword })).status, 401);
+  const family = await post('/access/family-login', { password: familyPassword });
+  assert.equal(family.status, 200);
+  assert.equal((await get('/session', family.cookie)).data.role, 'viewer');
+  assert.equal((await get('/photos', family.cookie)).status, 200);
+  assert.equal((await get('/controls', family.cookie)).status, 403);
+  assert.equal((await post('/capture', {}, family.cookie)).status, 403);
+  assert.equal((await post('/access/issue-invitation', {}, family.cookie)).status, 403);
   assert.deepEqual((await post('/capture', {}, owner.cookie)).data.files, ['capture.jpg']);
   assert.equal((await get('/schedule', owner.cookie)).data.enabled, false);
   const daily = { enabled: true, times: ['08:30'], timezone: 'America/Chicago' };

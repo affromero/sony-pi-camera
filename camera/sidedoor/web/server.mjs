@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   AccessError, AccessService, accessStateSchema, hashPassword, initialAccessState, initializeAccess, isAccessError,
+  verifyPassword,
 } from 'thesidedoor-core/access';
 import { accessErrorStatus, cookieValue, createAccessHandler } from 'thesidedoor-core/access/http';
 import { FileStateStore } from 'thesidedoor-core/storage';
@@ -15,6 +16,7 @@ import { sendPreviewStream } from './stream.mjs';
 
 const cookieName = '__Host-sony-viewer';
 const ownerName = 'Camera admin';
+const familyName = 'Camera family';
 const hourMs = 60 * 60 * 1000;
 const assets = new Map(await Promise.all([
   ['/', 'index.html', 'text/html; charset=utf-8'],
@@ -26,7 +28,7 @@ const assets = new Map(await Promise.all([
 
 const ownerAccess = new Set(['issue-invitation', 'revoke-invitation', 'invitations',
   'sessions', 'revoke-session', 'reauthenticate', 'change-password']);
-const accessPosts = new Set(['login', 'logout', 'redeem-invitation', 'issue-invitation',
+const accessPosts = new Set(['login', 'family-login', 'logout', 'redeem-invitation', 'issue-invitation',
   'revoke-invitation', 'revoke-session', 'reauthenticate', 'change-password']);
 const cameraRoutes = new Map([
   ['GET /photos', '/api/photos?details=1'],
@@ -89,6 +91,25 @@ export async function initializeAdmin(directory, password) {
   });
 }
 
+export async function initializeFamily(directory, password) {
+  const store = accessStore(directory);
+  const snapshot = await store.read();
+  const owner = snapshot.principals.find(({ role, name }) => role === 'owner' && name === ownerName);
+  if (snapshot.mode !== 'household' || !owner?.passwordHash) throw new Error('Configure the camera admin first');
+  if (await verifyPassword(password, owner.passwordHash)) throw new Error('Choose a separate family password');
+  const passwordHash = await hashPassword(password);
+  return store.transact((state) => {
+    if (state.mode !== 'household' || !state.principals.some((item) =>
+      item.id === owner.id && item.role === 'owner' && item.passwordHash === owner.passwordHash))
+      throw new Error('Camera admin account changed. Retry family setup.');
+    if (state.principals.some(({ name }) => name === familyName)) return false;
+    state.principals.push({
+      id: randomUUID(), name: familyName, role: 'member', epoch: 0, createdAt: Date.now(), passwordHash,
+    });
+    return true;
+  });
+}
+
 export async function createViewer({ origin, directory, mode = 'admin', inviteOrigin = origin, camera,
   privateStream = false }) {
   const guest = mode === 'guest';
@@ -99,6 +120,8 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
 
   const store = accessStore(directory);
   const state = await store.read();
+  const familyEnabled = state.principals.some(({ name, role, passwordHash }) =>
+    name === familyName && role === 'member' && passwordHash);
   if (state.mode !== 'household' || state.householdPasswordHash ||
       !state.principals.some(({ role, name }) => role === 'owner' && name === ownerName))
     throw new Error('Initialize the camera admin before starting the viewer');
@@ -126,13 +149,17 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
     const { principal, session } = await access.authenticate(token);
     const admin = session.principalId !== null && principal?.role === 'owner' && session.principalId === principal.id;
     if (admin && !guest) return { role: 'admin' };
-    if (!(guest || shared) || ownerOnly || session.principalId !== null || session.admission !== 'invitation')
+    const invite = session.principalId === null && session.admission === 'invitation';
+    const family = principal?.role === 'member' && principal.name === familyName && session.principalId === principal.id;
+    if (!(guest || shared) || ownerOnly || !(invite || family))
       throw new AccessError('forbidden');
     return { role: 'viewer' };
   }
 
   async function handleAccess(request, response, action) {
-    if (!shared && guest !== (action === 'redeem-invitation') && action !== 'logout')
+    const viewerAction = action === 'redeem-invitation' || action === 'family-login';
+    if ((!shared && guest !== viewerAction && action !== 'logout') ||
+        (action === 'family-login' && !familyEnabled))
       return send(response, 404, { error: 'Not found.' });
     if (!(request.method === 'GET' && ['invitations', 'sessions'].includes(action)) &&
         !(request.method === 'POST' && accessPosts.has(action))) return send(response, 404, { error: 'Not found.' });
@@ -142,14 +169,20 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
     if (request.method === 'POST') {
       body = await readJson(request);
       if (action === 'login') body = { name: ownerName, password: body.password };
+      if (action === 'family-login') body = { name: familyName, password: body.password };
       if (action === 'issue-invitation') body = { uses: 1 };
       if (action === 'redeem-invitation') body = { code: body.code };
     }
-    const check = ['login', 'reauthenticate', 'change-password'].includes(action);
+    const check = ['login', 'family-login', 'reauthenticate', 'change-password'].includes(action);
     if (check && checkingPassword) return send(response, 429, { error: 'Try again shortly.' });
     if (check) checkingPassword = true;
     try {
-      const result = await sidedoor(browserRequest(request, body), action);
+      if (action === 'change-password' && typeof body.password === 'string') {
+        const family = (await store.read()).principals.find(({ name }) => name === familyName);
+        if (family?.passwordHash && await verifyPassword(body.password, family.passwordHash))
+          return send(response, 400, { error: 'Choose a password different from the family password.' });
+      }
+      const result = await sidedoor(browserRequest(request, body), action === 'family-login' ? 'login' : action);
       const cookie = result.headers.get('Set-Cookie');
       if (cookie) response.setHeader('Set-Cookie', cookie);
       if (action === 'issue-invitation' && result.ok)
@@ -190,7 +223,7 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
     if (guest && !(request.method === 'GET' && (
       ['/', '/viewer.css', '/viewer.js', '/admin.js', '/session', '/photos', '/preview'].includes(path) ||
       photoRoute
-    )) && !(request.method === 'POST' && ['/access/redeem-invitation', '/access/logout'].includes(path)))
+    )) && !(request.method === 'POST' && ['/access/redeem-invitation', '/access/family-login', '/access/logout'].includes(path)))
       return send(response, 404, { error: 'Not found.' });
     if (request.method === 'POST' && (request.headers.origin !== origin ||
         request.headers['sec-fetch-site'] === 'cross-site')) return send(response, 403, { error: 'Forbidden.' });
@@ -203,7 +236,11 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
     const assetPath = path === '/?manage=1' && !guest ? '/' : path;
     if (request.method === 'GET' && assets.has(assetPath)) {
       const [body, type] = assets.get(assetPath);
-      if (guest && path === '/') return send(response, 200, body.toString().replace('<body>', '<body data-guest>'), type);
+      if (assetPath === '/') {
+        const guestAttr = guest ? ' data-guest' : '';
+        const familyAttr = familyEnabled && (guest || shared) ? ' data-family' : '';
+        return send(response, 200, body.toString().replace('<body>', `<body${guestAttr}${familyAttr}>`), type);
+      }
       return send(response, 200, body, type);
     }
     if (request.method === 'GET' && controlAssets.has(path)) {
@@ -284,7 +321,7 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const directory = process.env.STATE_DIRECTORY;
-  if (process.argv[2] === 'setup') {
+  if (['setup', 'setup-family'].includes(process.argv[2])) {
     const chunks = [];
     let bytes = 0;
     for await (const chunk of process.stdin) {
@@ -293,8 +330,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       chunks.push(chunk);
     }
     const password = Buffer.concat(chunks).toString('utf8').replace(/\r?\n$/, '');
-    if (!await initializeAdmin(directory, password)) throw new Error('Camera admin already exists');
-    console.log('Camera admin configured.');
+    const family = process.argv[2] === 'setup-family';
+    const initialize = family ? initializeFamily : initializeAdmin;
+    const account = family ? 'Camera family viewer' : 'Camera admin';
+    if (!await initialize(directory, password)) throw new Error(account + ' already exists');
+    console.log(account + ' configured.');
   } else {
     const cameraToken = (await readFile(join(homedir(), '.config/sony-pi-camera/camera-token'), 'utf8')).trim();
     if (!cameraToken) throw new Error('Configure a camera key');
