@@ -11,9 +11,8 @@ flowchart LR
     Timer --> Camera
     Timer -. Optional preview advice .-> AI[AI provider]
     Camera --> Gallery[Pi gallery]
-    Camera --> Sony[USB camera]
-    Camera -. Optional Rust preview .-> Worker[libgphoto2 worker]
-    Worker --> Sony
+    Camera --> Worker[Rust camera backend]
+    Worker -->|libgphoto2| Sony[USB camera]
 ```
 
-[Setup and operation](SETUP.md) · [Rust preview and USB benchmarks](SETUP.md#experimental-rust-usb-preview) · [Glossary](GLOSSARY.md) · [MIT license](LICENSE)
+[Setup and operation](SETUP.md) · [USB benchmarks](SETUP.md#compare-usb-preview-backends) · [Glossary](GLOSSARY.md) · [MIT license](LICENSE)

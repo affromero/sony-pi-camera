@@ -1,4 +1,4 @@
-"""Exercise the camera's optional native worker at the process boundary."""
+"""Exercise the camera's native worker at the process boundary."""
 
 import subprocess
 import sys
@@ -31,7 +31,7 @@ class RustPreviewTest(unittest.TestCase):
         self.addCleanup(worker.stop)
         return worker
 
-    def test_reuses_preview_session_and_releases_it_before_cli(self):
+    def test_reuses_preview_session_and_releases_it_before_settings(self):
         worker = self.start_worker(
             "sequence = 0\n"
             "while sys.stdin.buffer.read(1) == b'P':\n"
@@ -50,11 +50,14 @@ class RustPreviewTest(unittest.TestCase):
             self.assertEqual(frame, b"\xff\xd8\x02\x00")
             self.assertEqual(state["y"], 2 / 428)
 
-            def cli(argv, **options):
+            def read_settings(argv, **options):
                 self.assertTrue((self.root / "released").exists())
+                self.assertEqual(argv[0], worker.executable)
                 return subprocess.CompletedProcess(argv, 0, "Current: 100", "")
 
-            with mock.patch.object(subprocess, "run", side_effect=cli):
+            with mock.patch.object(
+                subprocess, "run", side_effect=read_settings
+            ):
                 self.assertEqual(
                     camera.command("--get-config", "iso"), "Current: 100"
                 )
@@ -83,3 +86,16 @@ class RustPreviewTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "preview size"):
             worker.frame()
         self.assertTrue((self.root / "released").exists())
+
+    def test_next_preview_reopens_after_worker_exits(self):
+        worker = self.start_worker(
+            "sys.stdin.buffer.read(1)\n"
+            "if not receipt.exists():\n"
+            "    receipt.touch()\n"
+            "    sys.exit(1)\n"
+            "sys.stdout.buffer.write(struct.pack('<III', 4, 10, 0)"
+            " + bytes((255, 216, 255, 217)))\n"
+        )
+        with self.assertRaisesRegex(RuntimeError, "worker exited"):
+            worker.frame()
+        self.assertEqual(worker.frame(), (b"\xff\xd8\xff\xd9", 10, 0))

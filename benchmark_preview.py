@@ -6,8 +6,10 @@ import json
 import platform
 import statistics
 import subprocess
+import tempfile
 import time
 from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
 
 from PIL import Image
@@ -37,7 +39,33 @@ def check_camera_service() -> None:
         raise RuntimeError("Stop the active Sony Pi Camera service first.")
 
 
-def measure(frames: int) -> dict[str, object]:
+def cli_command(*args: str, cwd: str | None = None) -> str:
+    return subprocess.run(
+        ["gphoto2", *args],
+        cwd=cwd,
+        timeout=10,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+
+
+def cli_preview() -> bytes:
+    with tempfile.TemporaryDirectory() as directory:
+        cli_command(
+            "--capture-preview",
+            "--filename",
+            "preview.jpg",
+            "--get-config",
+            "d22f",
+            "--get-config",
+            "d230",
+            cwd=directory,
+        )
+        return (Path(directory) / "preview.jpg").read_bytes()
+
+
+def measure(frames: int, preview: Callable[[], bytes]) -> dict[str, object]:
     timings = []
     dimensions: Counter[str] = Counter()
     repeats = 0
@@ -45,7 +73,7 @@ def measure(frames: int) -> dict[str, object]:
     sequence_start = time.monotonic()
     for _ in range(frames):
         start = time.monotonic()
-        jpeg, _, _ = camera.preview_frame(False)
+        jpeg = preview()
         timings.append((time.monotonic() - start) * 1000)
         with Image.open(io.BytesIO(jpeg)) as image:
             dimensions[f"{image.width}x{image.height}"] += 1
@@ -67,13 +95,13 @@ def measure(frames: int) -> dict[str, object]:
 def compare(worker: RustPreview, frames: int) -> dict[str, object]:
     versions = [
         line.strip()
-        for line in camera.command("--version", timeout=5).splitlines()
+        for line in cli_command("--version").splitlines()
         if line.startswith(("gphoto2 ", "libgphoto2 ", "libgphoto2_port "))
     ]
-    cli = measure(frames)
+    cli = measure(frames, cli_preview)
     camera.RUST_PREVIEW = worker
     try:
-        rust = measure(frames)
+        rust = measure(frames, lambda: worker.frame()[0])
         start = time.monotonic()
         settings = camera.viewport(
             camera.command("--get-config", "d22f", "--get-config", "d230")
@@ -91,7 +119,7 @@ def compare(worker: RustPreview, frames: int) -> dict[str, object]:
         "cli": cli,
         "rust": rust,
         "handoff": {
-            "cli_viewport_read_ms": round(handoff_ms, 3),
+            "rust_viewport_read_ms": round(handoff_ms, 3),
             "rust_reopen_and_preview_ms": round(reopen_ms, 3),
             "viewport": settings,
         },

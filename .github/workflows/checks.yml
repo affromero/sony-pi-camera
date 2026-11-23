@@ -48,7 +48,7 @@ jobs:
           npm test
       - name: Run camera service tests
         run: uv run --frozen --extra ftps python -m unittest discover -s tests -v
-      - name: Build and test the optional Rust preview worker
+      - name: Build and test the Rust camera backend
         if: matrix.python == '3.13'
         working-directory: camera/rust-preview
         run: |

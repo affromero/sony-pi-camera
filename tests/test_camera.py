@@ -25,6 +25,23 @@ SCHEDULE = SERVER.with_name("scheduled_capture.py")
 
 
 class ApertureTest(unittest.TestCase):
+    def test_setting_waits_for_the_camera_to_publish_its_new_value(self):
+        writes = []
+        replies = iter(("64", "100"))
+
+        def usb(action, argument):
+            if action == "--set-config-value":
+                writes.append(argument)
+                return ""
+            return f"Current: {next(replies)}"
+
+        with (
+            mock.patch.object(camera, "command", side_effect=usb),
+            mock.patch.object(camera.time, "sleep"),
+        ):
+            camera.set_setting("iso", "100")
+        self.assertEqual(writes, ["iso=100"])
+
     def test_region_uses_native_levels_and_reports_measured_center(self):
         ratio, x, y = 0, 320, 214
 
@@ -148,12 +165,13 @@ class CameraTest(unittest.TestCase):
         cls.base = f"http://127.0.0.1:{cls.port}"
         env = os.environ.copy()
         env.update(HOME=str(cls.home), PI_CAMERA_PORT=str(cls.port))
-        fake_camera = cls.home / "gphoto2"
+        fake_camera = cls.home / "sony-pi-preview"
         fake_camera.write_text(
             "#!/bin/sh\n"
             'case "$1" in\n'
-            "--capture-preview) printf frame > preview.jpg; "
-            "printf 'Current: 59\\nCurrent: 20971734\\n';;\n"
+            '"") while [ "$(dd bs=1 count=1 2>/dev/null)" = P ]; do '
+            "printf '\\007\\000\\000\\000\\073\\000\\000\\000"
+            "\\326\\000\\100\\001\\377\\330frame'; done;;\n"
             '--get-config) if [ "$2" = "expprogram" ]; then '
             'while [ "$#" -gt 0 ]; do '
             'case "$2" in '
@@ -170,7 +188,7 @@ class CameraTest(unittest.TestCase):
             "*) exit 1;;\nesac\n"
         )
         fake_camera.chmod(0o700)
-        env["PATH"] = str(cls.home) + os.pathsep + env["PATH"]
+        env["PI_CAMERA_BACKEND_BINARY"] = str(fake_camera)
         cls.process = subprocess.Popen([sys.executable, str(SERVER)], env=env)
         token_file = cls.home / ".config/sony-pi-camera/camera-token"
         for _ in range(100):
@@ -224,7 +242,8 @@ class CameraTest(unittest.TestCase):
 
     def test_preview_reports_the_camera_magnifier_viewport(self):
         with self.request("/api/preview", self.token) as response:
-            self.assertEqual(response.read(), b"frame")
+            self.assertEqual(response.read(), b"\xff\xd8frame")
+            self.assertEqual(response.headers["X-Preview-Backend"], "rust")
             self.assertEqual(response.headers["X-Magnification"], "5.9")
             self.assertEqual(response.headers["X-Magnifier-X"], "0.5")
             self.assertEqual(response.headers["X-Magnifier-Y"], "0.5")
@@ -235,7 +254,7 @@ class CameraTest(unittest.TestCase):
         self.assertEqual(error.exception.code, 403)
         with self.request("/api/advice-input", self.token) as response:
             data = json.load(response)
-        self.assertEqual(base64.b64decode(data["jpeg"]), b"frame")
+        self.assertEqual(base64.b64decode(data["jpeg"]), b"\xff\xd8frame")
         self.assertEqual(data["magnification"], 5.9)
         self.assertEqual(data["settings"]["mode"], "M")
         self.assertEqual(data["settings"]["iso"]["choices"], ["400"])
@@ -342,7 +361,7 @@ class CameraTest(unittest.TestCase):
                 (name,) = json.load(response)["files"]
                 (self.home / "camera-photos" / name).unlink()
         with self.request("/api/preview", self.token) as response:
-            self.assertEqual(response.read(), b"frame")
+            self.assertEqual(response.read(), b"\xff\xd8frame")
 
     def test_capture_saves_magnified_sensor_region_with_orientation(self):
         viewport = {"ratio": 5.9, "x": 0.75, "y": 0.25}

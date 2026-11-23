@@ -6,6 +6,11 @@ if [ "$(id -u)" -ne 0 ] || [ -z "${SUDO_USER:-}" ]; then
   exit 1
 fi
 project_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+backend_binary=${PI_CAMERA_BACKEND_BINARY:-"$project_dir/rust-preview/target/release/sony-pi-preview"}
+if [ ! -x "$backend_binary" ]; then
+  printf 'Build the required Rust camera backend before running the installer. See SETUP.md.\n' >&2
+  exit 1
+fi
 camera_home=$(getent passwd "$SUDO_USER" | cut -d: -f6)
 config_dir="$camera_home/.config/sony-pi-camera"
 install -d -m 700 -o "$SUDO_USER" "$config_dir"
@@ -72,6 +77,7 @@ if [ ! -e "$config_dir/transfer-password" ]; then
   chown "$SUDO_USER" "$config_dir/transfer-password"
 fi
 install -d -m 755 /opt/pi-camera
+install -m 755 "$backend_binary" /opt/pi-camera/sony-pi-preview
 install -m 644 "$project_dir/camera.py" "$project_dir/camera.html" \
   "$project_dir/rust_preview.py" \
   "$project_dir/schedule.py" \
