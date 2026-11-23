@@ -18,7 +18,7 @@ const cookieName = '__Host-sony-viewer';
 const ownerName = 'Camera admin';
 const familyName = 'Camera family';
 const activeStreams = new WeakMap();
-const hourMs = 60 * 60 * 1000;
+const sessionTtlMs = 30 * 24 * 60 * 60 * 1000;
 const validIdleSeconds = (value) => Number.isInteger(value) && value >= 5 && value <= 300;
 const assets = new Map(await Promise.all([
   ['/', 'index.html', 'text/html; charset=utf-8'],
@@ -134,7 +134,7 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
       !state.principals.some(({ role, name }) => role === 'owner' && name === ownerName))
     throw new Error('Initialize the camera admin before starting the viewer');
   const access = new AccessService({
-    store, householdSessionTtlMs: 30 * 24 * hourMs, sessionTtlMs: 12 * hourMs,
+    store, sessionTtlMs, householdSessionTtlMs: sessionTtlMs,
     allowPrincipalAccessInHousehold: true, allowHouseholdInvitations: true,
   });
   const sidedoor = createAccessHandler({ access, origin, cookieName, name: 'Sony Live Camera' });

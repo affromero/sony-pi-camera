@@ -69,11 +69,13 @@ test('serves admins and read-only invitees on the same hostname', { timeout: 800
   assert.equal((await get('/admin-qr.js')).status, 401);
   const owner = await post('/access/login', { password });
   assert.equal(owner.status, 200);
+  assert.match(owner.headers['set-cookie'][0], /Max-Age=(2591999|2592000);/);
   assert.equal((await get('/session', owner.cookie)).data.role, 'admin');
   assert.equal((await get('/ai', owner.cookie)).status, 200);
   assert.equal((await post('/access/login', { password: familyPassword })).status, 401);
   const family = await post('/access/family-login', { password: familyPassword });
   assert.equal(family.status, 200);
+  assert.match(family.headers['set-cookie'][0], /Max-Age=(2591999|2592000);/);
   assert.equal((await get('/session', family.cookie)).data.role, 'viewer');
   assert.equal((await get('/photos', family.cookie)).status, 200);
   assert.equal((await get('/controls', family.cookie)).status, 403);

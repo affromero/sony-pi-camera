@@ -114,6 +114,8 @@ The rear LCD is controlled on the camera. Enable **Monitor Off** under **Camera 
 
 To add a reusable family password, run the viewer's `setup-family` command with the same state directory as the admin setup and supply a separate password on stdin. Restart the viewer afterward. **Open as family** gives access to the live preview and gallery.
 
+New admin and family sign-ins stay signed in on the same browser for 30 days. Signing out ends the session immediately. The cookie contains a session token.
+
 
 ## Daily photos
 
