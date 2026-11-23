@@ -152,7 +152,7 @@ fn update_setting(name: &std::ffi::CStr, value: &str) -> io::Result<()> {
     if io::stdin().read(&mut approval)? == 0 {
         return Ok(());
     }
-    if approval != [b'Y'] {
+    if approval != *b"Y" {
         return Err(io::Error::other("Invalid setting approval"));
     }
     camera.set_config(name, value)?;
