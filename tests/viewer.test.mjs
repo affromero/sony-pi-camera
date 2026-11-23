@@ -40,8 +40,13 @@ function call(port, path, { method = 'GET', body, cookie, site = origin, host = 
 test('serves admins and read-only invitees on the same hostname', { timeout: 8000 }, async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'sony-camera-shared-'));
   await initializeAdmin(directory, password);
+  let schedule = { enabled: false, times: ['08:00'], timezone: 'UTC' };
   const camera = {
-    async json(path) {
+    async json(path, body) {
+      if (path === '/api/schedule') {
+        if (body) schedule = body;
+        return { status: 200, data: schedule };
+      }
       assert.equal(path, '/api/photos?details=1');
       return { status: 200, data: [{ name: 'street.jpg' }] };
     },
@@ -61,6 +66,9 @@ test('serves admins and read-only invitees on the same hostname', { timeout: 800
   assert.equal(owner.status, 200);
   assert.equal((await get('/session', owner.cookie)).data.role, 'admin');
   assert.equal((await get('/ai', owner.cookie)).status, 200);
+  assert.equal((await get('/schedule', owner.cookie)).data.enabled, false);
+  const daily = { enabled: true, times: ['08:30'], timezone: 'America/Chicago' };
+  assert.deepEqual((await post('/schedule', daily, owner.cookie)).data, daily);
   const invitation = await post('/access/issue-invitation', {}, owner.cookie);
   assert.equal(invitation.data.origin, origin);
   const body = { code: invitation.data.code };
@@ -71,6 +79,8 @@ test('serves admins and read-only invitees on the same hostname', { timeout: 800
   assert.deepEqual((await get('/photos', viewer.cookie)).data, [{ name: 'street.jpg' }]);
   assert.equal((await get('/settings', viewer.cookie)).status, 403);
   assert.equal((await get('/ai', viewer.cookie)).status, 403);
+  assert.equal((await get('/schedule', viewer.cookie)).status, 403);
+  assert.equal((await post('/schedule', { ...daily, enabled: false }, viewer.cookie)).status, 403);
   assert.equal((await get('/admin-qr.js', viewer.cookie)).status, 403);
   assert.equal((await post('/delete', { name: 'street.jpg' }, viewer.cookie)).status, 403);
   assert.equal((await post('/access/issue-invitation', {}, viewer.cookie)).status, 403);

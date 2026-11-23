@@ -31,6 +31,8 @@ const accessPosts = new Set(['login', 'logout', 'redeem-invitation', 'issue-invi
 const cameraRoutes = new Map([
   ['GET /photos', '/api/photos?details=1'],
   ['GET /settings', '/api/settings'],
+  ['GET /schedule', '/api/schedule'],
+  ['POST /schedule', '/api/schedule'],
   ['POST /setting', '/api/setting'],
   ['POST /delete', '/api/delete'],
 ]);

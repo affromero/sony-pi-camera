@@ -28,6 +28,7 @@
         <p id="preview-status" role="status">Waiting for the camera…</p>
       </div>
       <section id="admin" hidden>
+        <h2>Manage camera</h2>
         <details>
           <summary>Camera access</summary>
           <button id="show-admin-qr" type="button">Show admin login QR code</button>
@@ -52,6 +53,20 @@
           <button id="refresh-sessions" type="button">Show active viewers</button>
         </details>
         <details>
+          <summary>Scheduled captures</summary>
+          <form id="schedule">
+            <fieldset id="schedule-fields" disabled>
+              <label><input id="schedule-enabled" type="checkbox"> Enable daily captures</label>
+              <label for="schedule-times">Daily capture times</label>
+              <input id="schedule-times" type="text" placeholder="08:00, 17:30" required>
+              <label for="schedule-zone">Time zone</label>
+              <input id="schedule-zone" type="text" placeholder="America/Chicago" required>
+              <button type="submit">Save schedule</button>
+            </fieldset>
+          </form>
+          <button id="refresh-schedule" type="button">Read schedule</button>
+        </details>
+        <details>
           <summary>AI advice for scheduled captures</summary>
           <form id="ai">
             <label><input id="ai-enabled" type="checkbox"> Analyze a preview before each scheduled shot</label>
@@ -70,11 +85,13 @@
         </details>
         <p id="admin-status" role="status"></p>
       </section>
-      <div class="gallery-heading">
-        <h2>Photos</h2>
-        <button id="refresh" type="button">Refresh</button>
-      </div>
-      <ul id="photos"></ul>
+      <section class="gallery" aria-labelledby="photos-heading">
+        <div class="gallery-heading">
+          <h2 id="photos-heading">Photos</h2>
+          <button id="refresh" type="button">Refresh</button>
+        </div>
+        <ul id="photos"></ul>
+      </section>
     </section>
     <noscript>Enable JavaScript to open the camera viewer.</noscript>
   </main>
