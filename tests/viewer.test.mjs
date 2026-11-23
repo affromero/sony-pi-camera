@@ -64,18 +64,26 @@ test('serves admins and read-only invitees on the same hostname', { timeout: 800
   });
   const get = (path, cookie) => call(port, path, { cookie });
   const post = (path, body, cookie) => call(port, path, { method: 'POST', body, cookie });
+  async function signInForMonth(path, password) {
+    const monthMs = 30 * 24 * 60 * 60 * 1000;
+    const before = Date.now();
+    const result = await post(path, { password });
+    const after = Date.now();
+    assert.equal(result.status, 200);
+    const { expiresAt } = result.data;
+    assert.ok(expiresAt >= before + monthMs && expiresAt <= after + monthMs);
+    const age = Number(result.headers['set-cookie'][0].match(/Max-Age=(\d+);/)?.[1]);
+    assert.ok(age >= Math.floor((expiresAt - after) / 1000) && age <= monthMs / 1000);
+    return result;
+  }
   assert.equal((await get('/photos')).status, 401);
   assert.equal((await get('/ai')).status, 401);
   assert.equal((await get('/admin-qr.js')).status, 401);
-  const owner = await post('/access/login', { password });
-  assert.equal(owner.status, 200);
-  assert.match(owner.headers['set-cookie'][0], /Max-Age=(2591999|2592000);/);
+  const owner = await signInForMonth('/access/login', password);
   assert.equal((await get('/session', owner.cookie)).data.role, 'admin');
   assert.equal((await get('/ai', owner.cookie)).status, 200);
   assert.equal((await post('/access/login', { password: familyPassword })).status, 401);
-  const family = await post('/access/family-login', { password: familyPassword });
-  assert.equal(family.status, 200);
-  assert.match(family.headers['set-cookie'][0], /Max-Age=(2591999|2592000);/);
+  const family = await signInForMonth('/access/family-login', familyPassword);
   assert.equal((await get('/session', family.cookie)).data.role, 'viewer');
   assert.equal((await get('/photos', family.cookie)).status, 200);
   assert.equal((await get('/controls', family.cookie)).status, 403);
