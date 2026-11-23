@@ -30,6 +30,9 @@ const assets = new Map(await Promise.all([
 
 const ownerAccess = new Set(['issue-invitation', 'revoke-invitation', 'invitations',
   'sessions', 'revoke-session', 'viewer-sessions', 'disconnect-viewers', 'reauthenticate', 'change-password']);
+const passkeyLogin = new Set(['authentication-options', 'authenticate-passkey']);
+const passkeyEnrollment = new Set(['register-options', 'register-passkey']);
+const guestAccessPosts = new Set(['redeem-invitation', 'family-login', 'logout', ...passkeyLogin, ...passkeyEnrollment]);
 const accessPosts = new Set(['login', 'family-login', 'logout', 'redeem-invitation', 'issue-invitation',
   'revoke-invitation', 'revoke-session', 'disconnect-viewers', 'reauthenticate', 'change-password']);
 const cameraRoutes = new Map([
@@ -165,12 +168,12 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
     return token;
   }
 
-  async function authenticate(request, ownerOnly) {
+  async function authenticate(request, ownerOnly, principalOnly = false) {
     const token = requestToken(request);
     const { principal, session } = await access.authenticate(token);
     const admin = session.principalId !== null && principal?.role === 'owner' && session.principalId === principal.id;
     if (admin && !guest) return { role: 'admin' };
-    if (!(guest || shared) || ownerOnly || !viewerKind(session, principal))
+    if (!(guest || shared) || ownerOnly || (principalOnly && !principal) || !viewerKind(session, principal))
       throw new AccessError('forbidden');
     return { role: 'viewer' };
   }
@@ -188,17 +191,24 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
   }
 
   async function handleAccess(request, response, action) {
+    const loginWithPasskey = passkeyLogin.has(action);
+    const enrollPasskey = passkeyEnrollment.has(action);
+    const passkeyAction = loginWithPasskey || enrollPasskey;
+    if (passkeyAction && guest && !familyEnabled)
+      return send(response, 404, { error: 'Not found.' });
     const viewerAction = action === 'redeem-invitation' || action === 'family-login';
-    if ((!shared && guest !== viewerAction && action !== 'logout') ||
+    if ((!passkeyAction && !shared && guest !== viewerAction && action !== 'logout') ||
         (action === 'family-login' && !familyEnabled))
       return send(response, 404, { error: 'Not found.' });
     if (!(request.method === 'GET' && ['invitations', 'sessions', 'viewer-sessions'].includes(action)) &&
-        !(request.method === 'POST' && accessPosts.has(action))) return send(response, 404, { error: 'Not found.' });
+        !(request.method === 'POST' && (accessPosts.has(action) || passkeyAction)))
+      return send(response, 404, { error: 'Not found.' });
     if (ownerAccess.has(action)) await authenticate(request, true);
+    if (enrollPasskey) await authenticate(request, false, true);
     if (guest && action === 'logout') await authenticate(request, false);
     let body;
     if (request.method === 'POST') {
-      body = await readJson(request);
+      body = await readJson(request, passkeyAction ? 64_000 : 8192);
       if (action === 'login') body = { name: ownerName, password: body.password };
       if (action === 'family-login') body = { name: familyName, password: body.password };
       if (action === 'issue-invitation') body = { uses: 1 };
@@ -225,8 +235,14 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
           return send(response, 400, { error: 'Choose a password different from the family password.' });
       }
       const result = await sidedoor(browserRequest(request, body), action === 'family-login' ? 'login' : action);
-      const cookie = result.headers.get('Set-Cookie');
-      if (cookie) response.setHeader('Set-Cookie', cookie);
+      if (action === 'authenticate-passkey' && result.ok) {
+        const { principal } = await result.clone().json();
+        const allowed = principal?.role === 'owner' && !guest ||
+          principal?.role === 'member' && principal.name === familyName && (guest || shared);
+        if (!allowed) throw new AccessError('forbidden');
+      }
+      const cookies = result.headers.getSetCookie();
+      if (cookies.length) response.setHeader('Set-Cookie', cookies);
       if (action === 'issue-invitation' && result.ok)
         return send(response, result.status, { ...(await result.json()), origin: inviteOrigin });
       send(response, result.status, Buffer.from(await result.arrayBuffer()), 'application/json');
@@ -261,15 +277,20 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
       return;
     }
     const route = request.method + ' ' + path;
+    const accessAction = path.startsWith('/access/') ? path.slice(8) : null;
     const photoRoute = request.method === 'GET' && /^\/(thumbnail|photo|download)\/([^/?]+)$/.exec(path);
     if (guest && !(request.method === 'GET' && (
-      ['/', '/viewer.css', '/viewer.js', '/admin.js', '/session', '/photos', '/stream'].includes(path) ||
+      ['/', '/viewer.css', '/viewer.js', '/admin.js', '/passkey-client.js', '/session', '/photos', '/stream'].includes(path) ||
       photoRoute
-    )) && !(request.method === 'POST' && ['/access/redeem-invitation', '/access/family-login', '/access/logout'].includes(path)))
+    )) && !(request.method === 'POST' && guestAccessPosts.has(accessAction)))
       return send(response, 404, { error: 'Not found.' });
     if (request.method === 'POST' && (request.headers.origin !== origin ||
         request.headers['sec-fetch-site'] === 'cross-site')) return send(response, 403, { error: 'Forbidden.' });
-    if (path.startsWith('/access/')) return handleAccess(request, response, path.slice(8));
+    if (accessAction !== null) return handleAccess(request, response, accessAction);
+    if (route === 'GET /passkey-client.js') {
+      const script = await readFile(new URL('passkey-client.js', import.meta.url));
+      return send(response, 200, script, 'text/javascript; charset=utf-8');
+    }
     if (route === 'GET /admin-qr.js') {
       await authenticate(request, true);
       const script = await readFile(new URL('admin-qr.js', import.meta.url));

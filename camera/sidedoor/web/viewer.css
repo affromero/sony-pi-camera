@@ -32,10 +32,12 @@ p:empty { display: none; }
 a { color: var(--accent); text-underline-offset: .18em; }
 
 form { display: grid; gap: .6rem; }
-#unlock, #invite {
+#unlock, #invite, #passkey-offer {
   width: min(100%, 23rem);
   margin: clamp(2rem, 8vh, 5rem) auto 0;
 }
+#passkey-offer { display: grid; gap: .6rem; }
+#passkey-offer p { margin: 0 0 .4rem; }
 main:has(#camera[hidden]) #status { width: min(100%, 23rem); margin-inline: auto; }
 input, select, textarea, button { font: inherit; min-height: 2.75rem; }
 input:not([type="checkbox"]), select, textarea {
@@ -62,8 +64,8 @@ button {
 }
 button:hover { background: #efeff3; }
 button:disabled { cursor: wait; opacity: .6; }
-button[type="submit"] { background: var(--accent); color: #fff; border-color: var(--accent); }
-button[type="submit"]:hover { background: #004fa8; }
+button[type="submit"], #save-passkey { background: var(--accent); color: #fff; border-color: var(--accent); }
+button[type="submit"]:hover, #save-passkey:hover { background: #004fa8; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 #camera { display: grid; gap: 1.5rem; margin-top: 1.5rem; }

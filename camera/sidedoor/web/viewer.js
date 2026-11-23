@@ -21,8 +21,12 @@ const familyLogin = document.body.hasAttribute('data-family');
 const guestPage = document.body.hasAttribute('data-guest');
 const adminButton = byId('login-admin');
 const familyButton = byId('login-family');
+const passkeyButton = byId('login-passkey');
+const passkeyOffer = byId('passkey-offer');
+const canUsePasskeys = Boolean(window.PublicKeyCredential && navigator.credentials);
 adminButton.hidden = guestPage;
 familyButton.hidden = !familyLogin;
+passkeyButton.hidden = !canUsePasskeys || (guestPage && !familyLogin);
 if (familyLogin) byId('password-label').textContent = 'Camera password';
 let generation = 0;
 let previewGeneration = 0;
@@ -74,6 +78,7 @@ function locked() {
   camera.hidden = lock.hidden = true;
   captureButton.hidden = true;
   captureStatus.textContent = '';
+  passkeyOffer.hidden = true;
   invite.hidden = !inviteCode;
   unlock.hidden = Boolean(inviteCode) || (guestPage && !familyLogin);
   if (unlock.hidden && !inviteCode && guestPage)
@@ -367,18 +372,60 @@ unlock.addEventListener('submit', async (event) => {
   event.preventDefault();
   const password = byId('password');
   const family = event.submitter === familyButton || guestPage;
-  adminButton.disabled = familyButton.disabled = true;
+  adminButton.disabled = familyButton.disabled = passkeyButton.disabled = true;
   try {
     await post(family ? '/access/family-login' : '/access/login', { password: password.value });
     unlock.reset();
-    await enter();
+    if (canUsePasskeys) {
+      unlock.hidden = true;
+      passkeyOffer.hidden = false;
+      status.textContent = '';
+      byId('save-passkey').focus();
+    } else await enter();
   } catch (error) {
     status.textContent = error.status === 401 ? (family ? 'Check the family password.' : 'Check the admin password.') :
       error.status === 429 ? 'Too many attempts. Try again later.' : 'Could not open the viewer.';
   } finally {
-    adminButton.disabled = familyButton.disabled = false;
+    adminButton.disabled = familyButton.disabled = passkeyButton.disabled = false;
   }
 });
+
+passkeyButton.addEventListener('click', async () => {
+  adminButton.disabled = familyButton.disabled = passkeyButton.disabled = true;
+  status.textContent = '';
+  try {
+    const { passkeys } = await import('/passkey-client.js');
+    await passkeys.authenticatePasskey();
+    unlock.reset();
+    await enter();
+  } catch {
+    status.textContent = 'Could not sign in with a passkey. Try again or use your password.';
+  } finally {
+    adminButton.disabled = familyButton.disabled = passkeyButton.disabled = false;
+  }
+});
+
+async function finishPasskeyOffer(save) {
+  const saveButton = byId('save-passkey');
+  const skipButton = byId('skip-passkey');
+  saveButton.disabled = skipButton.disabled = true;
+  status.textContent = '';
+  try {
+    if (save) {
+      const { passkeys } = await import('/passkey-client.js');
+      await passkeys.registerPasskey('Live Camera');
+    }
+    await enter();
+  } catch {
+    status.textContent = save ? 'Could not save the passkey. Try again or continue without one.' :
+      'Could not open the viewer. Try again.';
+  } finally {
+    saveButton.disabled = skipButton.disabled = false;
+  }
+}
+
+byId('save-passkey').addEventListener('click', () => void finishPasskeyOffer(true));
+byId('skip-passkey').addEventListener('click', () => void finishPasskeyOffer(false));
 
 invite.addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -450,6 +497,7 @@ async function enter() {
   if (!response.ok) return locked();
   const session = await response.json();
   const { role } = session;
+  passkeyOffer.hidden = true;
   idleSeconds = session.idleSeconds ?? 15;
   admin = role === 'admin';
   if (admin && location.search !== '?manage=1') {

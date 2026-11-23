@@ -79,11 +79,25 @@ test('serves admins and read-only invitees on the same hostname', { timeout: 800
   assert.equal((await get('/photos')).status, 401);
   assert.equal((await get('/ai')).status, 401);
   assert.equal((await get('/admin-qr.js')).status, 401);
+  assert.equal((await post('/access/register-options', {})).status, 401);
+  const passkeyOptions = await post('/access/authentication-options', {});
+  assert.equal(passkeyOptions.status, 200);
+  assert.equal(passkeyOptions.data.options.rpId, 'camera.example.test');
+  assert.match(passkeyOptions.headers['set-cookie'][0], /^__Host-sony-viewer_ceremony=.*HttpOnly.*Secure/);
   const owner = await signInForMonth('/access/login', password);
+  const ownerPasskey = await post('/access/register-options', {}, owner.cookie);
+  assert.equal(ownerPasskey.data.options.user.name, 'Camera admin');
+  assert.equal(ownerPasskey.data.options.authenticatorSelection.userVerification, 'required');
   assert.equal((await get('/session', owner.cookie)).data.role, 'admin');
   assert.equal((await get('/ai', owner.cookie)).status, 200);
   assert.equal((await post('/access/login', { password: familyPassword })).status, 401);
   const family = await signInForMonth('/access/family-login', familyPassword);
+  const familyPasskey = await post('/access/register-options', {}, family.cookie);
+  assert.equal(familyPasskey.data.options.user.name, 'Camera family');
+  assert.notEqual(familyPasskey.data.options.user.id, ownerPasskey.data.options.user.id);
+  assert.equal((await call(port, '/access/register-options', {
+    method: 'POST', body: {}, cookie: family.cookie, site: 'https://wrong.example.test',
+  })).status, 403);
   assert.equal((await get('/session', family.cookie)).data.role, 'viewer');
   assert.equal((await get('/photos', family.cookie)).status, 200);
   assert.equal((await get('/controls', family.cookie)).status, 403);
@@ -98,6 +112,7 @@ test('serves admins and read-only invitees on the same hostname', { timeout: 800
   const body = { code: invitation.data.code };
   const viewer = await post('/access/redeem-invitation', body);
   assert.equal(viewer.status, 200);
+  assert.equal((await post('/access/register-options', {}, viewer.cookie)).status, 403);
   assert.equal((await post('/access/redeem-invitation', body)).status, 401);
   assert.deepEqual((await get('/session', viewer.cookie)).data, { role: 'viewer', idleSeconds: 15 });
   assert.equal((await post('/preview-settings', { idleSeconds: 30 }, viewer.cookie)).status, 403);

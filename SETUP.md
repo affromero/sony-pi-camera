@@ -76,7 +76,7 @@ The live view requests one JPEG at a time over USB. When you focus, change a set
 
 The optional Sidedoor viewer has its own hostname and access rules. Use the admin password to view and download photos, change camera settings, delete Pi copies, configure AI advice, and issue viewer invitations. Each invitation works once within 24 hours. The viewer can see the live preview and download the entire Pi gallery, including future captures and uploads. A viewer session lasts 30 days on the browser that accepted it. Use **Show active viewers** to revoke one early. The private Pi dashboard and other projects keep their own access.
 
-Install Node.js 22 or newer on the Pi, with `node` on systemd's PATH. On a Linux ARM64 builder, run `npm ci --prefix camera/sidedoor` and `npm run build --prefix camera/sidedoor`. Include the generated `web/admin-qr.js` and Linux ARM64 runtime dependencies in the deployment bundle. Run the camera installer, place those runtime dependencies in `/opt/pi-camera/sidedoor/node_modules`, and create the admin in a Bash shell on the Pi. Use a strong, unique password.
+Install Node.js 22 or newer on the Pi, with `node` on systemd's PATH. On a Linux ARM64 builder, run `npm ci --prefix camera/sidedoor` and `npm run build --prefix camera/sidedoor`. Include the generated `web/admin-qr.js`, `web/passkey-client.js`, and Linux ARM64 runtime dependencies in the deployment bundle. Run the camera installer, place those runtime dependencies in `/opt/pi-camera/sidedoor/node_modules`, and create the admin in a Bash shell on the Pi. Use a strong, unique password.
 
 ```sh
 viewer_state="/var/lib/sony-pi-camera-$USER"
@@ -115,6 +115,8 @@ The rear LCD is controlled on the camera. Enable **Monitor Off** under **Camera 
 To add a reusable family password, run the viewer's `setup-family` command with the same state directory as the admin setup and supply a separate password on stdin. Restart the viewer afterward. **Open as family** gives access to the live preview and gallery.
 
 New admin and family sign-ins stay signed in on the same browser for 30 days. Signing out ends the session immediately. The cookie contains a session token.
+
+After signing in with the admin or family password, choose **Save a passkey** to use Touch ID, Face ID, or your device PIN on later visits. Choose **Sign in with a passkey** on the same HTTPS hostname to return in the role you enrolled. Invitation links continue to grant read-only sessions. Keep your password for browsers or devices without your saved passkey.
 
 
 ## Daily photos

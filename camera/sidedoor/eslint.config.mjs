@@ -1,7 +1,7 @@
 import globals from 'globals';
 
 export default [
-  { ignores: ['**/node_modules/**', '**/web/admin-qr.js'] },
+  { ignores: ['**/node_modules/**', '**/web/admin-qr.js', '**/web/passkey-client.js'] },
   {
     files: ['camera/**/*.js', 'camera/**/*.mjs', 'tests/**/*.mjs'],
     linterOptions: { reportUnusedDisableDirectives: 'error' },

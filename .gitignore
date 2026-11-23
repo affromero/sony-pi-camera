@@ -4,3 +4,4 @@ __pycache__/
 node_modules/
 camera/rust-preview/target/
 /camera/sidedoor/web/admin-qr.js
+/camera/sidedoor/web/passkey-client.js

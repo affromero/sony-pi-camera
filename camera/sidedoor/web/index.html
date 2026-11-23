@@ -21,7 +21,14 @@
       <input id="password" name="password" type="password" autocomplete="current-password" maxlength="256" required>
       <button type="submit" id="login-admin" title="Sign in to use camera controls and manage access">Open as admin</button>
       <button type="submit" id="login-family" title="Sign in to view the live camera and saved photos" hidden>Open as family</button>
+      <button type="button" id="login-passkey" title="Use a saved passkey to sign in" hidden>Sign in with a passkey</button>
     </form>
+    <section id="passkey-offer" aria-labelledby="passkey-offer-title" hidden>
+      <h2 id="passkey-offer-title">Use a passkey next time</h2>
+      <p>Sign in with Touch ID, Face ID, or your device PIN.</p>
+      <button type="button" id="save-passkey" title="Save a passkey in your device or password manager">Save a passkey</button>
+      <button type="button" id="skip-passkey" title="Open the camera without creating a passkey">Continue without a passkey</button>
+    </section>
     <form id="invite" hidden>
       <button type="submit" title="Use this invitation to open the live camera and gallery">Accept camera invitation</button>
     </form>
