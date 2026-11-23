@@ -15,7 +15,7 @@
 [hidden] { display: none !important; }
 body { margin: 0; }
 main { margin-inline: auto; max-width: 76rem; padding: 2rem clamp(1rem, 4vw, 3rem) 4rem; }
-header, .gallery-heading, #photos li {
+header, .gallery-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -67,6 +67,7 @@ button[type="submit"]:hover { background: #004fa8; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 #camera { display: grid; gap: 1.5rem; margin-top: 1.5rem; }
+.preview-panel { min-width: 0; overflow: hidden; border-radius: 1rem; background: var(--paper); }
 .preview {
   display: grid;
   place-items: center;
@@ -74,28 +75,38 @@ button[type="submit"]:hover { background: #004fa8; }
   aspect-ratio: 3 / 2;
   max-height: 68vh;
   overflow: hidden;
-  border-radius: 1rem;
   background: #17171a;
 }
 .preview img { position: absolute; width: 100%; height: 100%; object-fit: contain; }
 .preview p { margin: 0; padding: 1rem; color: #dddde4; }
+.preview-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center; gap: .75rem; min-height: 3.75rem; padding: .75rem 1rem;
+  color: var(--quiet); font-size: .875rem; }
+.preview-toolbar p { margin: 0; text-align: right; }
+#capture-photo { width: 3rem; min-height: 3rem; padding: 0; border-radius: 50%;
+  border: 2px solid #777780; background: var(--ink); box-shadow: inset 0 0 0 3px var(--paper); }
+#capture-photo:hover { background: #414149; }
 .gallery, #admin { min-width: 0; }
+.gallery { border-radius: 1rem; background: var(--paper); padding: clamp(1rem, 3vw, 1.5rem); }
 .gallery-heading { min-height: 2.75rem; }
-#photos { margin: .65rem 0 0; padding: 0; }
-#photos li { min-height: 3rem; border-top: 1px solid var(--line); padding: .5rem 0; overflow-wrap: anywhere; }
+#photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr));
+  gap: 1rem; margin: 1rem 0 0; padding: 0; list-style: none; }
+#photos li { min-width: 0; overflow-wrap: anywhere; }
 #photos li > a { min-width: 0; }
-.photo-link { display: flex; align-items: center; gap: .75rem; }
-.photo-thumbnail { flex: none; display: block; width: 4.75rem; aspect-ratio: 3 / 2; background: #e5e5ea;
-  border-radius: .45rem; overflow: hidden; }
+.photo-link { display: grid; gap: .45rem; font-size: .875rem; text-decoration: none; }
+.photo-link:hover { text-decoration: underline; }
+.photo-thumbnail { display: block; width: 100%; aspect-ratio: 3 / 2; background: #e5e5ea;
+  border-radius: .65rem; overflow: hidden; }
 .photo-thumbnail img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .photo-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: .5rem;
   flex-wrap: wrap;
   color: var(--quiet);
   font-size: .875rem;
+  margin-top: .35rem;
 }
 .photo-actions span { white-space: nowrap; }
 
@@ -112,7 +123,7 @@ details form { font-size: .9rem; }
 fieldset { display: grid; min-width: 0; gap: .6rem; border: 0; margin: 0; padding: 0; }
 #settings { display: grid; margin-top: .75rem; }
 #settings:empty, #viewer-sessions:empty { display: none; }
-#settings label { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+.setting-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
   align-items: center; gap: .65rem; min-height: 2.9rem; border-top: 1px solid var(--line);
   font-size: .875rem; line-height: 1.25; overflow-wrap: anywhere; }
 #settings select { border: 1px solid transparent; background: #f5f5f7;
@@ -127,10 +138,10 @@ fieldset { display: grid; min-width: 0; gap: .6rem; border: 0; margin: 0; paddin
 @media (min-width: 58rem) {
   #camera:has(#admin:not([hidden])) {
     grid-template-columns: minmax(0, 1fr) 20rem;
-    grid-template-areas: "preview admin" "gallery admin";
+    grid-template-areas: "preview admin" "gallery gallery";
     grid-template-rows: auto 1fr;
   }
-  #camera:has(#admin:not([hidden])) .preview { grid-area: preview; }
+  #camera:has(#admin:not([hidden])) .preview-panel { grid-area: preview; }
   #camera:has(#admin:not([hidden])) .gallery { grid-area: gallery; }
   #admin { grid-area: admin; align-self: start; }
 }

@@ -34,6 +34,7 @@ const cameraRoutes = new Map([
   ['GET /schedule', '/api/schedule'],
   ['POST /schedule', '/api/schedule'],
   ['POST /setting', '/api/setting'],
+  ['POST /capture', '/api/capture'],
   ['POST /delete', '/api/delete'],
 ]);
 

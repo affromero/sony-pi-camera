@@ -76,17 +76,21 @@ async function loadSettings(current) {
   for (const [name, title] of Object.entries(settingLabels)) {
     const setting = data[name];
     if (!setting || !setting.current) continue;
-    const label = document.createElement('label');
-    const caption = document.createElement('span');
+    const row = document.createElement('div');
+    row.className = 'setting-row';
+    const editable = !setting.readonly && setting.choices?.length;
+    const caption = document.createElement(editable ? 'label' : 'span');
     caption.textContent = title;
-    label.append(caption);
-    if (setting.readonly || !setting.choices?.length) {
+    row.append(caption);
+    if (!editable) {
       const value = document.createElement('span');
       value.className = 'setting-value';
       value.textContent = setting.current;
-      label.append(value);
+      row.append(value);
     } else {
       const select = document.createElement('select');
+      select.id = 'camera-setting-' + name;
+      caption.htmlFor = select.id;
       const choices = [...new Set([setting.current, ...setting.choices])];
       select.append(...choices.map((value) => new Option(value, value, false, value === setting.current)));
       select.onchange = () => act(async (active) => {
@@ -96,9 +100,9 @@ async function loadSettings(current) {
           await loadSettings(active);
         }
       }, settingsStatus);
-      label.append(select);
+      row.append(select);
     }
-    fields.push(label);
+    fields.push(row);
   }
   settings.replaceChildren(...fields);
 }

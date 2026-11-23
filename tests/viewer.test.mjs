@@ -48,6 +48,7 @@ test('serves admins and read-only invitees on the same hostname', { timeout: 800
         if (body) schedule = body;
         return { status: 200, data: schedule };
       }
+      if (path === '/api/capture') return { status: 200, data: { ok: true, files: ['capture.jpg'] } };
       assert.equal(path, '/api/photos?details=1');
       return { status: 200, data: [{ name: 'street.jpg' }] };
     },
@@ -67,6 +68,7 @@ test('serves admins and read-only invitees on the same hostname', { timeout: 800
   assert.equal(owner.status, 200);
   assert.equal((await get('/session', owner.cookie)).data.role, 'admin');
   assert.equal((await get('/ai', owner.cookie)).status, 200);
+  assert.deepEqual((await post('/capture', {}, owner.cookie)).data.files, ['capture.jpg']);
   assert.equal((await get('/schedule', owner.cookie)).data.enabled, false);
   const daily = { enabled: true, times: ['08:30'], timezone: 'America/Chicago' };
   assert.deepEqual((await post('/schedule', daily, owner.cookie)).data, daily);
@@ -84,6 +86,7 @@ test('serves admins and read-only invitees on the same hostname', { timeout: 800
   assert.equal((await post('/schedule', { ...daily, enabled: false }, viewer.cookie)).status, 403);
   assert.equal((await get('/admin-qr.js', viewer.cookie)).status, 403);
   assert.equal((await post('/delete', { name: 'street.jpg' }, viewer.cookie)).status, 403);
+  assert.equal((await post('/capture', {}, viewer.cookie)).status, 403);
   assert.equal((await post('/access/issue-invitation', {}, viewer.cookie)).status, 403);
 });
 

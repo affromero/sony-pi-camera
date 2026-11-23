@@ -26,10 +26,17 @@
     </form>
     <p id="status" role="status"></p>
     <section id="camera" hidden>
-      <div class="preview">
-        <img id="preview" alt="Latest camera preview" hidden>
-        <p id="preview-status" role="status">Waiting for the camera…</p>
-      </div>
+      <section class="preview-panel" aria-label="Camera preview">
+        <div class="preview">
+          <img id="preview" alt="Latest camera preview" hidden>
+          <p id="preview-status" role="status">Waiting for the camera…</p>
+        </div>
+        <div class="preview-toolbar">
+          <span>Live preview</span>
+          <button id="capture-photo" type="button" aria-label="Take photo" title="Take photo" hidden></button>
+          <p id="capture-status" role="status"></p>
+        </div>
+      </section>
       <section id="admin" hidden>
         <div class="settings-heading">
           <h2>Camera settings</h2>

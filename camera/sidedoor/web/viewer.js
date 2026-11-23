@@ -9,6 +9,8 @@ const status = byId('status');
 const photos = byId('photos');
 const preview = byId('preview');
 const previewStatus = byId('preview-status');
+const captureButton = byId('capture-photo');
+const captureStatus = byId('capture-status');
 let generation = 0;
 let galleryRequest = 0;
 let timer;
@@ -32,6 +34,8 @@ function locked() {
   previewStatus.textContent = 'Waiting for the camera…';
   photos.replaceChildren();
   camera.hidden = lock.hidden = true;
+  captureButton.hidden = true;
+  captureStatus.textContent = '';
   invite.hidden = !inviteCode;
   unlock.hidden = Boolean(inviteCode) || document.body.hasAttribute('data-guest');
   if (unlock.hidden && !inviteCode && document.body.hasAttribute('data-guest'))
@@ -245,6 +249,21 @@ lock.addEventListener('click', async () => {
   }
 });
 byId('refresh').addEventListener('click', loadPhotos);
+captureButton.addEventListener('click', async () => {
+  const current = generation;
+  captureButton.disabled = true;
+  captureStatus.textContent = 'Taking photo…';
+  try {
+    await post('/capture');
+    if (current !== generation) return;
+    captureStatus.textContent = 'Photo saved.';
+    await loadPhotos();
+  } catch (error) {
+    if (current === generation) captureStatus.textContent = error.message;
+  } finally {
+    captureButton.disabled = false;
+  }
+});
 document.addEventListener('visibilitychange', refreshPreview);
 
 async function enter() {
@@ -254,6 +273,7 @@ async function enter() {
   admin = role === 'admin';
   privateStream = admin && streaming;
   camera.hidden = lock.hidden = false;
+  captureButton.hidden = !admin;
   unlock.hidden = invite.hidden = true;
   const current = generation;
   await Promise.all([showAdmin(admin), loadPhotos()]);
