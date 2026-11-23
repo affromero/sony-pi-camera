@@ -8,7 +8,7 @@ The admin takes a photo from the live preview. It appears below under **Photos o
 
 Family members can open that same photo in their read-only viewer and download the original.
 
-![Read-only family photo viewer showing a saved bird feeder photo with a download button](docs/family-photo-viewer.jpg)
+![Read-only family photo viewer showing a saved bird feeder photo with a download button](docs/family-bird-feeder-photo.jpg)
 
 Example setup for watching a backyard bird feeder and sharing photos with family. The scene and settings are simulated.
 
