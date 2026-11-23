@@ -28,9 +28,9 @@ const assets = new Map(await Promise.all([
   [path, [await readFile(new URL(file, import.meta.url)), type]])));
 
 const ownerAccess = new Set(['issue-invitation', 'revoke-invitation', 'invitations',
-  'sessions', 'revoke-session', 'reauthenticate', 'change-password']);
+  'sessions', 'revoke-session', 'viewer-sessions', 'disconnect-viewers', 'reauthenticate', 'change-password']);
 const accessPosts = new Set(['login', 'family-login', 'logout', 'redeem-invitation', 'issue-invitation',
-  'revoke-invitation', 'revoke-session', 'reauthenticate', 'change-password']);
+  'revoke-invitation', 'revoke-session', 'disconnect-viewers', 'reauthenticate', 'change-password']);
 const cameraRoutes = new Map([
   ['GET /photos', '/api/photos?details=1'],
   ['GET /settings', '/api/settings'],
@@ -79,6 +79,13 @@ function accessStore(directory) {
     initial: initialAccessState,
     parse: (value) => accessStateSchema.parse(value),
   });
+}
+
+function viewerKind(session, principal) {
+  if (session.principalId === null && session.admission === 'invitation') return 'invitation';
+  if (principal?.role === 'member' && principal.name === familyName && session.principalId === principal.id)
+    return 'family';
+  return null;
 }
 
 export async function initializeAdmin(directory, password) {
@@ -143,17 +150,32 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
       body: body === undefined ? undefined : JSON.stringify(body) });
   }
 
-  async function authenticate(request, ownerOnly) {
+  function requestToken(request) {
     const token = cookieValue(browserRequest({ headers: request.headers, method: 'GET' }), cookieName);
     if (!/^[\w-]{43}$/.test(token ?? '')) throw new AccessError('unauthorized');
+    return token;
+  }
+
+  async function authenticate(request, ownerOnly) {
+    const token = requestToken(request);
     const { principal, session } = await access.authenticate(token);
     const admin = session.principalId !== null && principal?.role === 'owner' && session.principalId === principal.id;
     if (admin && !guest) return { role: 'admin' };
-    const invite = session.principalId === null && session.admission === 'invitation';
-    const family = principal?.role === 'member' && principal.name === familyName && session.principalId === principal.id;
-    if (!(guest || shared) || ownerOnly || !(invite || family))
+    if (!(guest || shared) || ownerOnly || !viewerKind(session, principal))
       throw new AccessError('forbidden');
     return { role: 'viewer' };
+  }
+
+  function viewerSessions(state, token) {
+    const { principal, session } = access.sessionFromState(state, token);
+    if (principal?.role !== 'owner' || session.principalId !== principal.id)
+      throw new AccessError('forbidden');
+    const family = state.principals.find(({ name, role }) => name === familyName && role === 'member');
+    const now = Date.now();
+    return state.sessions.flatMap((item) => {
+      const kind = viewerKind(item, family);
+      return kind && item.expiresAt > now ? [{ id: item.id, expiresAt: item.expiresAt, kind }] : [];
+    });
   }
 
   async function handleAccess(request, response, action) {
@@ -161,7 +183,7 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
     if ((!shared && guest !== viewerAction && action !== 'logout') ||
         (action === 'family-login' && !familyEnabled))
       return send(response, 404, { error: 'Not found.' });
-    if (!(request.method === 'GET' && ['invitations', 'sessions'].includes(action)) &&
+    if (!(request.method === 'GET' && ['invitations', 'sessions', 'viewer-sessions'].includes(action)) &&
         !(request.method === 'POST' && accessPosts.has(action))) return send(response, 404, { error: 'Not found.' });
     if (ownerAccess.has(action)) await authenticate(request, true);
     if (guest && action === 'logout') await authenticate(request, false);
@@ -172,6 +194,17 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
       if (action === 'family-login') body = { name: familyName, password: body.password };
       if (action === 'issue-invitation') body = { uses: 1 };
       if (action === 'redeem-invitation') body = { code: body.code };
+    }
+    if (action === 'viewer-sessions')
+      return send(response, 200, { sessions: viewerSessions(await store.read(), requestToken(request)) });
+    if (action === 'disconnect-viewers') {
+      const token = requestToken(request);
+      const disconnected = await store.transact((current) => {
+        const ids = new Set(viewerSessions(current, token).map(({ id }) => id));
+        current.sessions = current.sessions.filter(({ id }) => !ids.has(id));
+        return ids.size;
+      });
+      return send(response, 200, { disconnected });
     }
     const check = ['login', 'family-login', 'reauthenticate', 'change-password'].includes(action);
     if (check && checkingPassword) return send(response, 429, { error: 'Try again shortly.' });

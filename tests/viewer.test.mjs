@@ -104,7 +104,7 @@ test('serves admins and read-only invitees on the same hostname', { timeout: 800
   assert.equal((await post('/access/issue-invitation', {}, viewer.cookie)).status, 403);
 });
 
-test('streams the preview to authorized family viewers and limits concurrent streams', { timeout: 8000 }, async (t) => {
+test('limits concurrent streams and lets only the admin disconnect active viewers', { timeout: 8000 }, async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'sony-camera-stream-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   await initializeAdmin(directory, password);
@@ -113,16 +113,23 @@ test('streams the preview to authorized family viewers and limits concurrent str
   const frame = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
   const camera = { async preview() { return frame; } };
   const viewer = await createViewer({ origin, directory, camera, mode: 'guest' });
-  t.after(() => viewer.close());
+  const admin = await createViewer({ origin, directory, camera });
+  t.after(() => { viewer.close(); admin.close(); });
   const port = await listen(viewer);
+  const adminPort = await listen(admin);
+  const post = (target, path, body, cookie, site) => call(target, path, { method: 'POST', body, cookie, site });
+  const owner = await post(adminPort, '/access/login', { password });
   assert.equal((await call(port, '/stream')).status, 401);
-  const family = await call(port, '/access/family-login', { method: 'POST', body: { password: familyPassword } });
+  const family = await post(port, '/access/family-login', { password: familyPassword });
+  const invitation = await post(adminPort, '/access/issue-invitation', {}, owner.cookie);
+  const invited = await post(port, '/access/redeem-invitation', { code: invitation.data.code });
+  const spare = await post(adminPort, '/access/issue-invitation', {}, owner.cookie);
   const streams = [];
   t.after(() => streams.forEach((stream) => stream.destroy()));
-  for (let i = 0; i < 3; i++) {
+  for (const cookie of [family.cookie, invited.cookie, family.cookie]) {
     const response = await new Promise((resolve, reject) => {
       const outgoing = request({ host: '127.0.0.1', port, path: '/stream',
-        headers: { Host: 'camera.example.test', Cookie: family.cookie } }, resolve);
+        headers: { Host: 'camera.example.test', Cookie: cookie } }, resolve);
       outgoing.on('error', reject);
       outgoing.end();
     });
@@ -132,7 +139,28 @@ test('streams the preview to authorized family viewers and limits concurrent str
   }
   assert.equal((await call(port, '/stream', { cookie: family.cookie })).status, 429);
   assert.equal((await call(port, '/settings', { cookie: family.cookie })).status, 404);
-  streams.forEach((stream) => stream.destroy());
+  const disconnect = '/access/disconnect-viewers';
+  assert.equal((await post(port, disconnect, {}, family.cookie)).status, 404);
+  assert.equal((await post(adminPort, disconnect, {}, family.cookie)).status, 403);
+  assert.equal((await post(adminPort, disconnect, {}, owner.cookie, 'https://wrong.example')).status, 403);
+  const sessionList = () => call(adminPort, '/access/viewer-sessions', { cookie: owner.cookie });
+  const active = await sessionList();
+  assert.deepEqual(active.data.sessions.map(({ kind }) => kind).sort(), ['family', 'invitation']);
+  const closed = streams.map((stream) => new Promise((resolve) => {
+    stream.once('close', resolve);
+    stream.resume();
+  }));
+  assert.deepEqual((await post(adminPort, disconnect, {}, owner.cookie)).data, { disconnected: 2 });
+  await Promise.all(closed);
+  assert.deepEqual((await sessionList()).data, { sessions: [] });
+  for (const cookie of [family.cookie, invited.cookie]) {
+    assert.equal((await call(port, '/session', { cookie })).status, 401);
+    assert.equal((await call(port, '/stream', { cookie })).status, 401);
+  }
+  assert.equal((await call(adminPort, '/session', { cookie: owner.cookie })).data.role, 'admin');
+  assert.deepEqual((await post(adminPort, disconnect, {}, owner.cookie)).data, { disconnected: 0 });
+  assert.equal((await post(port, '/access/redeem-invitation', { code: spare.data.code })).status, 200);
+  assert.equal((await post(port, '/access/family-login', { password: familyPassword })).status, 200);
 });
 
 test('keeps viewer invitations read-only and admin AI credentials private', { timeout: 8000 }, async (t) => {

@@ -6,6 +6,8 @@ const menu = byId('admin-menu');
 const inviteLink = byId('invite-link');
 const settings = byId('settings');
 const sessions = byId('viewer-sessions');
+const disconnectViewers = byId('disconnect-viewers');
+const sessionStatus = byId('viewer-session-status');
 const ai = byId('ai');
 const schedule = byId('schedule');
 const scheduleFields = byId('schedule-fields');
@@ -114,17 +116,17 @@ async function loadSettings(current) {
 }
 
 async function loadSessions(current) {
-  const data = await get('/access/sessions');
+  const data = await get('/access/viewer-sessions');
   if (generation !== current) return;
-  const rows = data.sessions.filter(({ principalId, admission }) =>
-    principalId === null && admission === 'invitation').map(({ id, expiresAt }) => {
+  const rows = data.sessions.map(({ id, expiresAt, kind }) => {
     const button = document.createElement('button');
     button.title = 'Sign this viewer out on their device';
-    button.textContent = 'Revoke viewer expiring ' + new Date(expiresAt).toLocaleString();
+    const label = kind === 'family' ? 'Family viewer' : 'Invited viewer';
+    button.textContent = label + ' · Sign out · Expires ' + new Date(expiresAt).toLocaleString();
     button.onclick = () => act(async (active) => {
       await post('/access/revoke-session', { id });
       await loadSessions(active);
-    });
+    }, sessionStatus);
     return button;
   });
   sessions.replaceChildren(...(rows.length ? rows : ['No active viewers.']));
@@ -149,6 +151,7 @@ export function showAdmin(enabled) {
   byId('open-admin-menu').hidden = !enabled;
   status.textContent = '';
   settingsStatus.textContent = '';
+  sessionStatus.textContent = '';
   if (enabled) {
     void act(async () => {
       const data = await get('/ai');
@@ -208,8 +211,22 @@ schedule.onsubmit = (event) => {
 byId('show-admin-qr').onclick = () => act((current) =>
   showQr(byId('admin-qr'), location.origin + '/', current));
 sessions.closest('details').addEventListener('toggle', () => {
-  if (sessions.closest('details').open) void act(loadSessions);
+  if (sessions.closest('details').open) void act(loadSessions, sessionStatus);
 });
+disconnectViewers.onclick = () => act(async (current) => {
+  if (!confirm('Sign out all current viewers? Family members can sign in again with their password.')) return;
+  disconnectViewers.disabled = true;
+  try {
+    const { disconnected } = await post('/access/disconnect-viewers');
+    if (generation !== current) return;
+    await loadSessions(current);
+    if (generation === current) sessionStatus.textContent = disconnected === 1
+      ? 'Disconnected 1 viewer.' : disconnected
+        ? `Disconnected ${disconnected} viewers.` : 'No viewers were signed in.';
+  } finally {
+    disconnectViewers.disabled = false;
+  }
+}, sessionStatus);
 byId('check-ai').onclick = () => act(async (current) => {
   const result = await post('/ai/check');
   if (generation !== current) return;

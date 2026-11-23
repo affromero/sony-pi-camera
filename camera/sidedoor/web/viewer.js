@@ -5,6 +5,7 @@ const unlock = byId('unlock');
 const invite = byId('invite');
 const lock = byId('lock');
 const camera = byId('camera');
+const adminMenu = byId('admin-menu');
 const status = byId('status');
 const photos = byId('photos');
 const preview = byId('preview');
@@ -255,6 +256,11 @@ async function refreshPreview() {
   streamRequest?.abort();
   const current = ++generation;
   if (document.hidden || camera.hidden || photoDialog.open) return;
+  if (admin && adminMenu.matches(':popover-open')) {
+    previewStatus.textContent = 'Preview paused while administration is open.';
+    previewStatus.hidden = false;
+    return;
+  }
   try {
     streamRequest = new AbortController();
     const response = await fetch('/stream', { signal: streamRequest.signal });
@@ -356,6 +362,9 @@ captureButton.addEventListener('click', async () => {
   }
 });
 document.addEventListener('visibilitychange', refreshPreview);
+adminMenu.addEventListener('toggle', () => {
+  if (admin) void refreshPreview();
+});
 function syncGallery() {
   if (!document.hidden && !camera.hidden) void loadPhotos();
 }
@@ -376,7 +385,7 @@ async function enter() {
   unlock.hidden = invite.hidden = true;
   const current = generation;
   await Promise.all([showAdmin(admin), loadPhotos()]);
-  if (admin && current === generation) byId('admin-menu').showPopover();
+  if (admin && current === generation) adminMenu.showPopover();
   if (current === generation) void refreshPreview();
 }
 void enter().catch(() => {
