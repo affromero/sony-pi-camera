@@ -2,11 +2,11 @@
 
 Preview, control, and schedule photos from a USB-connected Sony camera on a Raspberry Pi. A family password or invitation opens a read-only gallery with live preview and original downloads. Optional AI advice suggests settings before a scheduled shot.
 
-![Admin workspace with a live preview, focus and magnification controls, and camera settings](docs/camera-controls.jpg)
+![Admin workspace showing a backyard bird feeder in the live preview, with focus, magnification, and camera settings](docs/camera-controls.jpg)
 
-![Read-only family photo viewer with a full-size image and a separate download action](docs/family-photo-viewer.jpg)
+![Read-only family photo viewer showing a saved bird feeder photo with a download button](docs/family-photo-viewer.jpg)
 
-Screenshots use a synthetic camera scene and sample settings.
+Example setup for watching a backyard bird feeder and sharing photos with family. The scene and settings are simulated.
 
 ```mermaid
 flowchart LR
