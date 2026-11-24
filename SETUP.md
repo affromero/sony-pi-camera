@@ -26,6 +26,55 @@ systemctl status "sony-pi-camera@$USER"
 journalctl -u "sony-pi-camera@$USER" -n 30
 ```
 
+## First monitoring setup
+
+- **Camera.** Sony α7 III, your lens, a stable mount, and a power supply suitable for the planned run time.
+- **Pi.** Raspberry Pi Zero 2 W, microSD card, and separate Pi power.
+- **USB.** A data cable and an OTG adapter for the Pi Zero's data port. Leave room for the plugs and secure the cable to the mount so a tug does not pull on the camera or Pi connector.
+
+Put the camera somewhere dry with an unobstructed view. Connect it in [PC Remote mode](#connect-the-camera), [open the dashboard](#open-the-dashboard), and take one photo. Open it under **Photos on the Pi** to confirm that capture and storage work.
+
+A printable Pi case is planned. The first design should leave the data, power, and microSD ports accessible and provide cable strain relief. [Pi Zero 2 W mechanical drawing](https://pip.raspberrypi.com/categories/584)
+
+HDMI capture is pending hardware testing. This setup uses USB preview and still capture.
+
+## Connect a computer vision worker
+
+Run the detector on your own computer. The Pi supplies preview JPEGs and saves the original still when the worker requests a capture. Keep the camera API private and open an SSH tunnel from the worker to the Pi.
+
+```sh
+ssh -o ExitOnForwardFailure=yes -N -L 127.0.0.1:8765:127.0.0.1:8765 user@hostname.local
+```
+
+In a second terminal on the worker, run this Python 3 example to download one preview. Change the opening command to `python3 - --capture <<'PY'` to also request one still. Enter the camera access key at the prompt.
+
+```sh
+python3 - <<'PY'
+import getpass
+import json
+import sys
+from pathlib import Path
+from urllib.request import Request, urlopen
+
+base = "http://127.0.0.1:8765"
+headers = {"X-Camera-Token": getpass.getpass("Camera access key: ")}
+
+with urlopen(Request(base + "/api/preview", headers=headers), timeout=30) as response:
+    Path("preview.jpg").write_bytes(response.read())
+
+if "--capture" in sys.argv:
+    request = Request(
+        base + "/api/capture",
+        data=b"{}",
+        headers={**headers, "Origin": base, "Content-Type": "application/json"},
+    )
+    with urlopen(request, timeout=120) as response:
+        print(json.load(response)["files"])
+PY
+```
+
+For a bird feeder, pass each preview to a detector on the worker, then request a still when a bird first enters the area you care about. Start with a low polling rate and add a cooldown between captures. If the camera returns HTTP 409, it is busy with another operation. Back off before polling again. Leave the camera in full-frame view and select a JPEG capture setting for the first test. The capture response lists the files saved on the Pi.
+
 ## Open the dashboard
 
 **On the Mac**, use Terminal to clone a second copy of the project. Replace `user@hostname.local` with the Pi account and hostname you configured. The first SSH command should print the Pi's hostname using your SSH key.
