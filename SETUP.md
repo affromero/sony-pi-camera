@@ -167,9 +167,16 @@ New admin and family sign-ins stay signed in on the same browser for 30 days. Si
 
 ### Password-free viewer on local Wi-Fi
 
-Add `LAN_VIEWER_ORIGIN=http://pi-schrute.local:8767` to the viewer's existing `/etc/sony-pi-viewer-USER.conf`, using the Pi's local hostname or reserved IPv4 address. The listener binds to the IPv4 address of `wlan0` by default. Set `LAN_VIEWER_INTERFACE` if the Pi uses another Wi-Fi interface name. Restart the viewer service, then open the exact configured URL from the same IPv4 subnet.
+In the viewer's existing `/etc/sony-pi-viewer-USER.conf`, set `LAN_VIEWER_CIDR` to the Pi's Wi-Fi address and prefix from `ip -4 -br addr show wlan0`. Set `LAN_VIEWER_ORIGIN` to the local URL, using that address or the Pi's local hostname. For example:
 
-Anyone on that subnet can see the live preview and saved photos. The local listener carries media over HTTP. Keep this port off public tunnels, reverse proxies and router port forwards. Wi-Fi client isolation can block access even on the same network. Reserve the Pi's IP in DHCP or restart the service after its IP changes. The public HTTPS viewer keeps its existing sign-in rules.
+```ini
+LAN_VIEWER_CIDR=192.168.4.111/22
+LAN_VIEWER_ORIGIN=http://192.168.4.111:8767
+```
+
+Restart the viewer service, then open the exact configured URL from the same IPv4 subnet.
+
+Anyone on that subnet can see the live preview and saved photos. The local listener carries media over HTTP. Keep this port off public tunnels, reverse proxies and router port forwards. Wi-Fi client isolation can block access even on the same network. Reserve the Pi's IP in DHCP. If it changes, update the configuration and restart the viewer. The public HTTPS viewer keeps its existing sign-in rules.
 
 After signing in with the admin or family password, choose **Save a passkey** to use Touch ID, Face ID, or your device PIN on later visits. Choose **Sign in with a passkey** on the same HTTPS hostname to return in the role you enrolled. Invitation links continue to grant read-only sessions. Keep your password for browsers or devices without your saved passkey.
 

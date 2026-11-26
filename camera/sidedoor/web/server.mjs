@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { chmod, readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
-import { BlockList } from 'node:net';
-import { homedir, networkInterfaces } from 'node:os';
+import { BlockList, isIPv4 } from 'node:net';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
@@ -411,21 +411,20 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
   return server;
 }
 
-async function startLanViewer(options, origin, interfaceName, waiting = false) {
-  const network = networkInterfaces()[interfaceName]
-    ?.find(({ family, internal, cidr }) => family === 'IPv4' && !internal && cidr);
-  if (!network) {
-    if (!waiting) console.error('LAN viewer: waiting for IPv4 on', interfaceName);
-    setTimeout(() => void startLanViewer(options, origin, interfaceName, true), 10000);
-    return;
-  }
+async function startLanViewer(options, origin, cidr) {
   try {
-    const [address, prefix] = network.cidr.split('/');
+    const [address, prefix, extra] = (cidr ?? '').split('/');
+    if (!isIPv4(address) || !/^(?:[1-9]|[12]\d|3[0-2])$/.test(prefix ?? '') || extra !== undefined)
+      throw new Error('Set LAN_VIEWER_CIDR to the Wi-Fi interface IPv4 address and prefix from ip -4 addr.');
     const lanNetwork = new BlockList();
     lanNetwork.addSubnet(address, Number(prefix), 'ipv4');
     const lan = await createViewer({ ...options, origin, mode: 'lan', lanNetwork });
-    lan.on('error', (error) => console.error('LAN viewer:', error.code));
-    lan.listen(Number(new URL(origin).port || 80), network.address);
+    const listen = () => lan.listen(Number(new URL(origin).port || 80), address);
+    lan.on('error', (error) => {
+      console.error('LAN viewer:', error.code);
+      if (error.code === 'EADDRNOTAVAIL') setTimeout(listen, 10000);
+    });
+    listen();
   } catch (error) {
     console.error('LAN viewer:', error.message);
   }
@@ -464,6 +463,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     broker.listen(brokerPath, async () => { await chmod(brokerPath, 0o660); });
     const lanOrigin = process.env.LAN_VIEWER_ORIGIN;
     if (lanOrigin)
-      void startLanViewer(options, lanOrigin, process.env.LAN_VIEWER_INTERFACE ?? 'wlan0');
+      void startLanViewer(options, lanOrigin, process.env.LAN_VIEWER_CIDR);
   }
 }
