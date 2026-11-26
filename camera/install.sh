@@ -82,6 +82,7 @@ install -m 644 "$project_dir/camera.py" "$project_dir/camera.html" \
   "$project_dir/rust_preview.py" \
   "$project_dir/schedule.py" \
   "$project_dir/camera.js" "$project_dir/camera.css" \
+  "$project_dir/publish-lan-name.sh" \
   "$project_dir/transfer.py" "$project_dir/scheduled_capture.py" /opt/pi-camera/
 install -d -m 755 /opt/pi-camera/sidedoor/web
 getent group sony-camera-viewer >/dev/null || groupadd --system sony-camera-viewer
@@ -96,6 +97,7 @@ install -m 644 "$project_dir/sony-pi-capture@.service" \
   "$project_dir/sony-pi-schedule@.service" \
   "$project_dir/sony-pi-capture@.timer" \
   "$project_dir/sony-pi-viewer@.service" \
+  "$project_dir/sony-pi-lan-name@.service" \
   "$project_dir/sony-pi-public-viewer@.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now "sony-pi-schedule@$SUDO_USER.socket"
