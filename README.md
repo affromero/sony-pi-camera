@@ -35,6 +35,8 @@ Keep the lens and image quality of a dedicated camera while a Raspberry Pi handl
 
 The Raspberry Pi controls the Sony camera over USB and stores the photos locally. The owner uses the browser dashboard to adjust settings or take a photo. Family viewers reach the live preview and gallery through a read-only HTTPS relay.
 
+The admin can see who is watching the live preview, including Wi-Fi streams, with an approximate country map for public viewers.
+
 Scheduled captures run on the Pi even when the separate compute machine is offline. When AI advice is enabled, the timer can send a preview to a vision model before taking the photo.
 
 ```mermaid

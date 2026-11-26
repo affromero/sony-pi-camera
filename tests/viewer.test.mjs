@@ -192,9 +192,14 @@ test('limits concurrent streams and lets only the admin disconnect active viewer
   const camera = { async preview() { return frame; } };
   const viewer = await createViewer({ origin, directory, camera, mode: 'guest' });
   const admin = await createViewer({ origin, directory, camera });
-  t.after(() => { viewer.close(); admin.close(); });
+  const network = new BlockList();
+  network.addAddress('127.0.0.1');
+  const lan = await createViewer({ origin: 'http://livecamera.local', directory, camera,
+    mode: 'lan', lanNetwork: network });
+  t.after(() => { viewer.close(); admin.close(); lan.close(); });
   const port = await listen(viewer);
   const adminPort = await listen(admin);
+  const lanPort = await listen(lan);
   const post = (target, path, body, cookie, site) => call(target, path, { method: 'POST', body, cookie, site });
   const owner = await post(adminPort, '/access/login', { password });
   assert.equal((await call(port, '/stream')).status, 401);
@@ -204,12 +209,20 @@ test('limits concurrent streams and lets only the admin disconnect active viewer
   const invitation = await post(adminPort, '/access/issue-invitation', {}, owner.cookie);
   const invited = await post(port, '/access/redeem-invitation', { code: invitation.data.code });
   const spare = await post(adminPort, '/access/issue-invitation', {}, owner.cookie);
+  const live = () => call(adminPort, '/live-viewers', { cookie: owner.cookie });
+  assert.deepEqual((await live()).data, { viewers: [] });
+  assert.equal((await call(adminPort, '/live-viewers', { cookie: family.cookie })).status, 403);
+  assert.equal((await call(port, '/world-map.json', { cookie: family.cookie })).status, 404);
+  assert.ok((await call(adminPort, '/world-map.json', { cookie: owner.cookie })).data.some(([code]) => code === 'US'));
   const streams = [];
   t.after(() => streams.forEach((stream) => stream.destroy()));
-  for (const cookie of [family.cookie, invited.cookie, family.cookie]) {
+  for (const [streamPort, headers] of [
+    [port, { Host: 'camera.example.test', Cookie: family.cookie }],
+    [port, { Host: 'camera.example.test', Cookie: invited.cookie }],
+    [lanPort, { Host: 'livecamera.local' }],
+  ]) {
     const response = await new Promise((resolve, reject) => {
-      const outgoing = request({ host: '127.0.0.1', port, path: '/stream',
-        headers: { Host: 'camera.example.test', Cookie: cookie } }, resolve);
+      const outgoing = request({ host: '127.0.0.1', port: streamPort, path: '/stream', headers }, resolve);
       outgoing.on('error', reject);
       outgoing.end();
     });
@@ -226,12 +239,15 @@ test('limits concurrent streams and lets only the admin disconnect active viewer
   const sessionList = () => call(adminPort, '/access/viewer-sessions', { cookie: owner.cookie });
   const active = await sessionList();
   assert.deepEqual(active.data.sessions.map(({ kind }) => kind).sort(), ['family', 'invitation']);
-  const closed = streams.map((stream) => new Promise((resolve) => {
+  assert.deepEqual((await live()).data.viewers.map(({ kind, ip }) => [kind, ip]),
+    [['family', null], ['invitation', null], ['wifi', '127.0.0.1']]);
+  const closed = streams.slice(0, 2).map((stream) => new Promise((resolve) => {
     stream.once('close', resolve);
     stream.resume();
   }));
   assert.deepEqual((await post(adminPort, disconnect, {}, owner.cookie)).data, { disconnected: 2 });
   await Promise.all(closed);
+  assert.deepEqual((await live()).data.viewers.map(({ kind }) => kind), ['wifi']);
   assert.deepEqual((await sessionList()).data, { sessions: [] });
   for (const cookie of [family.cookie, invited.cookie]) {
     assert.equal((await call(port, '/session', { cookie })).status, 401);
@@ -347,11 +363,15 @@ test('keeps viewer invitations read-only and admin AI credentials private', { ti
   assert.equal((await guestGet('/photo/%2e%2e%2Ffile', guest)).status, 404);
   const guestStream = await new Promise((resolve, reject) => {
     const outgoing = request({ host: '127.0.0.1', port: relayPort, path: '/stream',
-      headers: { Host: 'camera.example.test', Cookie: guest } }, resolve);
+      headers: { Host: 'camera.example.test', Cookie: guest,
+        'CF-Connecting-IP': '203.0.113.42', 'CF-IPCountry': 'US' } }, resolve);
     outgoing.on('error', reject);
     outgoing.end();
   });
   assert.equal(guestStream.statusCode, 200);
+  const { viewers } = (await get('/live-viewers', owner.cookie)).data;
+  assert.deepEqual(viewers.map(({ kind, ip, country }) => [kind, ip, country]),
+    [['invitation', '203.0.113.42', 'US']]);
   guestStream.destroy();
   assert.equal((await guestGet('/session', owner.cookie)).status, 403);
   assert.equal((await guestPost('/access/logout', {}, owner.cookie)).status, 403);

@@ -147,6 +147,10 @@ fieldset { display: grid; min-width: 0; gap: .6rem; border: 0; margin: 0; paddin
 #settings select:hover { border-color: var(--line); }
 .setting-value { color: var(--quiet); padding-inline: .4rem; }
 #viewer-sessions { display: grid; gap: .5rem; margin-bottom: .75rem; overflow-wrap: anywhere; }
+#viewer-map { display: block; width: 100%; height: auto; border-radius: .75rem; background: #e5edf8; }
+.viewer-map-legend { font-size: .83rem; }
+#viewer-activity-list { padding-inline-start: 1.25rem; overflow-wrap: anywhere; }
+#viewer-activity-list li + li { margin-top: .5rem; }
 .access-qr { width: fit-content; max-width: 100%; padding: .5rem; background: #fff; }
 .access-qr .sd-qr { max-width: 100%; height: auto !important; }
 .access-qr svg { display: block; width: 100%; height: auto; }

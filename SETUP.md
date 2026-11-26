@@ -155,7 +155,11 @@ Sign in as admin and create a link under **Viewer invitations**. Share the link 
 
 After admin sign-in, the shared site opens the same camera controls used on the Pi. Use the menu at the top right to manage invitations and AI advice.
 
-Under **Viewer invitations**, choose **Disconnect all viewers** to sign out current family and invitation sessions and stop their live previews. Family members can sign in again with their password, and unused invitations still work. Your preview pauses while the administration menu is open.
+Under **Viewer invitations**, choose **Disconnect signed-in viewers** to sign out current family and invitation sessions and stop their live previews. Family members can sign in again with their password, and unused invitations still work. Your preview pauses while the administration menu is open.
+
+Open **Live viewers** in the admin menu to see connected previews, their access type, IP address, and connection time. The map shades countries by the number of live previews. IP location is approximate. Local Wi-Fi viewers appear in the list. The Pi keeps these details in memory until the stream closes.
+
+With Cloudflare Tunnel, enable **IP Geolocation** under **Network** for the public domain to supply country codes. The map uses public-domain [Natural Earth country boundaries](https://www.naturalearthdata.com/downloads/110m-cultural-vectors/110m-admin-0-countries/).
 
 The viewer stops streaming when its tab is hidden or after 15 seconds without input. Returning to the tab, moving the pointer, tapping, or pressing a key wakes the preview. Change the timeout under **Preview sleep** in the admin menu. Other viewers pick up the new timeout the next time they open the viewer.
 

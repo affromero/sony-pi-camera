@@ -1,6 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises';
 
-export async function sendPreviewStream(response, camera, authorize) {
+export async function sendPreviewStream(response, camera, authorize, onStart) {
   const stream = new AbortController();
   const close = () => stream.abort();
   response.once('close', close);
@@ -22,11 +22,14 @@ export async function sendPreviewStream(response, camera, authorize) {
       if (stream.signal.aborted) return true;
       if (performance.now() >= expiresAt) break;
       if (frame && frame !== previous) {
-        if (!previous) response.writeHead(200, {
-          // WebKit cancels fetch responses labeled multipart/x-mixed-replace.
-          'Content-Type': 'application/octet-stream',
-          'X-Accel-Buffering': 'no',
-        });
+        if (!previous) {
+          onStart?.();
+          response.writeHead(200, {
+            // WebKit cancels fetch responses labeled multipart/x-mixed-replace.
+            'Content-Type': 'application/octet-stream',
+            'X-Accel-Buffering': 'no',
+          });
+        }
         response.write(`--sony-preview\r\nContent-Type: image/jpeg\r\nContent-Length: ${frame.length}\r\n\r\n`);
         response.write(frame);
         response.write('\r\n');

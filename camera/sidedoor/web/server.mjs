@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { chmod, readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
-import { BlockList, isIPv4 } from 'node:net';
+import { BlockList, isIP, isIPv4 } from 'node:net';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -20,6 +20,7 @@ const ownerName = 'Camera admin';
 const familyName = 'Camera family';
 const sharedPasswordScope = 'camera-shared-password';
 const activeStreams = new WeakMap();
+const liveViewers = new WeakMap();
 const sessionTtlMs = 30 * 24 * 60 * 60 * 1000;
 const validIdleSeconds = (value) => Number.isInteger(value) && value >= 5 && value <= 300;
 const assets = new Map(await Promise.all([
@@ -132,6 +133,8 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
   if (publicUrl.protocol !== (lan ? 'http:' : 'https:') || publicUrl.origin !== origin ||
       !camera || (lan && !lanNetwork))
     throw new Error('Invalid viewer configuration');
+  if (!liveViewers.has(camera)) liveViewers.set(camera, new Set());
+  const watching = liveViewers.get(camera);
   const allowedHosts = new Set([publicUrl.host]);
   if (lan && isIPv4(lanAddress)) {
     const ipUrl = new URL(origin);
@@ -203,7 +206,7 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
     if (admin && !guest) return { role: 'admin' };
     if (!(guest || shared) || ownerOnly || (principalOnly && !principal) || !viewerKind(session, principal))
       throw new AccessError('forbidden');
-    return { role: 'viewer' };
+    return { role: 'viewer', kind: viewerKind(session, principal) };
   }
 
   function viewerSessions(state, token) {
@@ -362,7 +365,13 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
     }
     if (route === 'GET /session') {
       const auth = await authenticate(request, false);
-      return send(response, 200, { ...auth, ...(await previewSettings.read()) });
+      return send(response, 200, { role: auth.role, ...(await previewSettings.read()) });
+    }
+    if (route === 'GET /live-viewers' || route === 'GET /world-map.json') {
+      await authenticate(request, true);
+      if (route === 'GET /live-viewers') return send(response, 200, { viewers: [...watching] });
+      const map = await readFile(new URL('world-map.json', import.meta.url));
+      return send(response, 200, map, 'application/json');
     }
     if (route === 'POST /preview-settings') {
       await authenticate(request, true);
@@ -377,14 +386,25 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
     }
     if (route === 'GET /stream') {
       const authorize = () => authenticate(request, false);
-      await authorize();
+      const auth = await authorize();
       const count = activeStreams.get(camera) ?? 0;
       if (count >= 3) return send(response, 429, { error: 'Camera streams are busy.' });
       activeStreams.set(camera, count + 1);
+      const viaRelay = !lan && request.socket.remoteAddress === undefined;
+      const address = viaRelay ? request.headers['cf-connecting-ip'] : request.socket.remoteAddress;
+      const country = viaRelay ? request.headers['cf-ipcountry'] : null;
+      const viewer = {
+        kind: lan ? 'wifi' : auth.kind,
+        ip: (lan || viaRelay) && typeof address === 'string' && isIP(address) ? address : null,
+        country: typeof country === 'string' && /^[A-Z]{2}$/.test(country) && country !== 'XX' ? country : null,
+        since: Date.now(),
+      };
       try {
-        if (!await sendPreviewStream(response, camera, authorize))
+        const onStart = auth.role === 'viewer' ? () => watching.add(viewer) : undefined;
+        if (!await sendPreviewStream(response, camera, authorize, onStart))
           send(response, 503, { error: 'Rust preview stream unavailable.' });
       } finally {
+        watching.delete(viewer);
         activeStreams.set(camera, activeStreams.get(camera) - 1);
       }
       return;

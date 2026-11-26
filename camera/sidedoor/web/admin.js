@@ -13,6 +13,14 @@ const schedule = byId('schedule');
 const scheduleFields = byId('schedule-fields');
 const previewIdle = byId('preview-idle');
 const previewSettingsStatus = byId('preview-settings-status');
+const activity = byId('viewer-activity');
+const activityStatus = byId('viewer-activity-status');
+const activityList = byId('viewer-activity-list');
+const viewerMap = byId('viewer-map');
+const regionNames = new Intl.DisplayNames(undefined, { type: 'region' });
+const viewerKinds = { family: 'Family', invitation: 'Invited', wifi: 'Local Wi-Fi' };
+let mapPaths;
+let activityTimer;
 let generation = 0;
 const qrCleanup = new Map();
 const settingLabels = {
@@ -131,8 +139,58 @@ async function loadSessions(current) {
     }, sessionStatus);
     return button;
   });
-  sessions.replaceChildren(...(rows.length ? rows : ['No active viewers.']));
+  sessions.replaceChildren(...(rows.length ? rows : ['No signed-in viewers.']));
 }
+
+function renderActivity(viewers) {
+  const counts = new Map();
+  const rows = viewers.map(({ kind, ip, country, since }) => {
+    if (country) counts.set(country, (counts.get(country) ?? 0) + 1);
+    const row = document.createElement('li');
+    const detail = [viewerKinds[kind], ip ?? 'IP unavailable'];
+    if (country) detail.push(regionNames.of(country));
+    detail.push('Since ' + new Date(since).toLocaleTimeString());
+    row.textContent = detail.join(' · ');
+    return row;
+  });
+  activityList.replaceChildren(...rows);
+  activityStatus.textContent = viewers.length === 0 ? 'Nobody is watching live.'
+    : viewers.length === 1 ? '1 live preview' : viewers.length + ' live previews';
+  const context = viewerMap.getContext('2d');
+  context.clearRect(0, 0, viewerMap.width, viewerMap.height);
+  for (const [country, path] of mapPaths) {
+    const count = counts.get(country) ?? 0;
+    context.fillStyle = ['#adb9c8', '#548dea', '#2365cb', '#194594'][Math.min(count, 3)];
+    context.fill(path, 'evenodd');
+  }
+}
+
+async function updateActivity() {
+  clearTimeout(activityTimer);
+  const current = generation;
+  const visible = () => current === generation && !section.hidden && activity.open &&
+    menu.matches(':popover-open') && !document.hidden;
+  if (!visible()) return;
+  try {
+    const { viewers } = await get('/live-viewers');
+    if (!mapPaths) mapPaths = (await get('/world-map.json')).map(([code, path]) => [code, new Path2D(path)]);
+    if (visible()) renderActivity(viewers);
+  } catch (error) {
+    if (visible()) {
+      activityList.replaceChildren();
+      activityStatus.textContent = error.message;
+    }
+  } finally {
+    if (visible()) {
+      clearTimeout(activityTimer);
+      activityTimer = setTimeout(updateActivity, 3000);
+    }
+  }
+}
+
+activity.addEventListener('toggle', updateActivity);
+menu.addEventListener('toggle', updateActivity);
+document.addEventListener('visibilitychange', updateActivity);
 
 function renderAi(data) {
   byId('ai-enabled').checked = data.enabled;
@@ -174,6 +232,10 @@ export function showAdmin(enabled, idleSeconds) {
   inviteLink.hidden = inviteLink.labels[0].hidden = true;
   settings.replaceChildren();
   sessions.replaceChildren();
+  clearTimeout(activityTimer);
+  activityList.replaceChildren();
+  activityStatus.textContent = '';
+  viewerMap.getContext('2d').clearRect(0, 0, viewerMap.width, viewerMap.height);
   for (const details of menu.querySelectorAll('details')) details.open = false;
 }
 

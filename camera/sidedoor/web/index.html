@@ -71,6 +71,14 @@
           <button id="show-admin-qr" type="button" title="Show a scannable link to the admin password prompt">Show admin login QR code</button>
           <div id="admin-qr" class="access-qr" role="img" aria-label="QR code for the camera admin login" hidden></div>
         </details>
+        <details id="viewer-activity">
+          <summary title="See who is receiving the live preview">Live viewers</summary>
+          <p>Approximate country by IP. Wi-Fi viewers appear in the list.</p>
+          <canvas id="viewer-map" width="720" height="360" role="img" aria-label="Viewer count by country"></canvas>
+          <p class="viewer-map-legend">Darker blue means more live previews.</p>
+          <p id="viewer-activity-status" role="status"></p>
+          <ul id="viewer-activity-list"></ul>
+        </details>
         <details>
           <summary title="Invite a viewer or revoke an existing viewer session">Viewer invitations</summary>
           <form id="issue">
@@ -81,7 +89,7 @@
             <input id="invite-link" type="text" readonly hidden>
             <div id="invite-qr" class="access-qr" role="img" aria-label="QR code for the single-use viewer invitation" hidden></div>
           </form>
-          <button id="disconnect-viewers" type="button" title="Sign out all current family and invitation viewers">Disconnect all viewers</button>
+          <button id="disconnect-viewers" type="button" title="Sign out all current family and invitation viewers">Disconnect signed-in viewers</button>
           <p id="viewer-session-status" role="status"></p>
           <div id="viewer-sessions"></div>
         </details>

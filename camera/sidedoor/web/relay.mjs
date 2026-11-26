@@ -6,7 +6,8 @@ import { pathToFileURL } from 'node:url';
 export function createRelay(socketPath) {
   return createServer({ headersTimeout: 5000, requestTimeout: 10000 }, (incoming, outgoing) => {
     const headers = {};
-    for (const name of ['host', 'origin', 'sec-fetch-site', 'cookie', 'content-type', 'content-length', 'x-forwarded-proto']) {
+    for (const name of ['host', 'origin', 'sec-fetch-site', 'cookie', 'content-type', 'content-length',
+      'x-forwarded-proto', 'cf-connecting-ip', 'cf-ipcountry']) {
       if (incoming.headers[name] !== undefined) headers[name] = incoming.headers[name];
     }
     const broker = request({ socketPath, method: incoming.method, path: incoming.url, headers }, (reply) => {
