@@ -175,6 +175,11 @@ test('serves admins and read-only invitees on the same hostname', { timeout: 800
   assert.equal((await post('/delete', { name: 'street.jpg' }, viewer.cookie)).status, 403);
   assert.equal((await post('/capture', {}, viewer.cookie)).status, 403);
   assert.equal((await post('/access/issue-invitation', {}, viewer.cookie)).status, 403);
+  for (let attempt = 0; attempt < 10; attempt++) {
+    assert.equal((await post('/access/login', { password: 'incorrect-camera-password' })).status, 401);
+  }
+  assert.equal((await post('/access/login', { password })).status, 429);
+  assert.equal((await post('/access/login', { password: familyPassword })).status, 429);
 });
 
 test('limits concurrent streams and lets only the admin disconnect active viewers', { timeout: 8000 }, async (t) => {

@@ -18,6 +18,7 @@ import { sendPreviewStream } from './stream.mjs';
 const cookieName = '__Host-sony-viewer';
 const ownerName = 'Camera admin';
 const familyName = 'Camera family';
+const sharedPasswordScope = 'camera-shared-password';
 const activeStreams = new WeakMap();
 const sessionTtlMs = 30 * 24 * 60 * 60 * 1000;
 const validIdleSeconds = (value) => Number.isInteger(value) && value >= 5 && value <= 300;
@@ -147,13 +148,16 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
     throw new Error('Initialize the camera admin before starting the viewer');
   class CameraAccess extends AccessService {
     async login(name, password, deviceName) {
-      if (shared && familyEnabled) {
-        const owner = (await store.read()).principals.find(({ name, role }) => name === ownerName && role === 'owner');
-        // Sidedoor rate-limits the request before calling login and rechecks the
-        // selected principal before issuing a session.
-        if (owner?.passwordHash && !await verifyPassword(password, owner.passwordHash)) name = familyName;
-      }
-      return super.login(name, password, deviceName);
+      if (!shared || !familyEnabled) return super.login(name, password, deviceName);
+      await this.reserveAttempt(sharedPasswordScope);
+      const owner = (await store.read()).principals.find(({ name, role }) => name === ownerName && role === 'owner');
+      // Sidedoor rechecks the selected principal before issuing a session.
+      const ownerMatches = owner?.passwordHash && await verifyPassword(password, owner.passwordHash);
+      const token = await super.login(ownerMatches ? ownerName : familyName, password, deviceName);
+      await store.transact((state) => {
+        state.failures = state.failures.filter(({ key }) => key !== `rate:${sharedPasswordScope}`);
+      });
+      return token;
     }
   }
   const access = new CameraAccess({
