@@ -19,6 +19,7 @@ const photoLoading = byId('photo-loading');
 const photoProgress = byId('photo-progress');
 const familyLogin = document.body.hasAttribute('data-family');
 const guestPage = document.body.hasAttribute('data-guest');
+const lanPage = document.body.hasAttribute('data-lan');
 const adminButton = byId('login-admin');
 const familyButton = byId('login-family');
 const passkeyButton = byId('login-passkey');
@@ -42,7 +43,7 @@ let sleeping = false;
 let imageUrl;
 let admin = false;
 let streamRequest;
-let inviteCode = new URLSearchParams(location.hash.slice(1)).get('invite');
+let inviteCode = lanPage ? null : new URLSearchParams(location.hash.slice(1)).get('invite');
 if (inviteCode) history.replaceState(null, '', location.pathname);
 
 function stopPreview() {
@@ -80,8 +81,8 @@ function locked() {
   captureStatus.textContent = '';
   passkeyOffer.hidden = true;
   invite.hidden = !inviteCode;
-  unlock.hidden = Boolean(inviteCode) || (guestPage && !familyLogin);
-  if (unlock.hidden && !inviteCode && guestPage)
+  unlock.hidden = lanPage || Boolean(inviteCode) || (guestPage && !familyLogin);
+  if (unlock.hidden && !inviteCode && guestPage && !lanPage)
     status.textContent = 'Open the invitation link from the camera owner.';
   admin = false;
   showAdmin(false);
@@ -504,7 +505,8 @@ async function enter() {
     location.replace('/controls');
     return;
   }
-  camera.hidden = lock.hidden = false;
+  camera.hidden = false;
+  lock.hidden = lanPage;
   captureButton.hidden = !admin;
   unlock.hidden = invite.hidden = true;
   const current = generation;

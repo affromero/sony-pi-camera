@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { chmod, readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
-import { homedir } from 'node:os';
+import { BlockList } from 'node:net';
+import { homedir, networkInterfaces } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
@@ -122,11 +123,13 @@ export async function initializeFamily(directory, password) {
   });
 }
 
-export async function createViewer({ origin, directory, mode = 'admin', inviteOrigin = origin, camera }) {
-  const guest = mode === 'guest';
+export async function createViewer({ origin, directory, mode = 'admin', inviteOrigin = origin, camera, lanNetwork }) {
+  const lan = mode === 'lan';
+  const guest = mode === 'guest' || lan;
   const shared = mode === 'shared';
   const publicUrl = new URL(origin);
-  if (publicUrl.protocol !== 'https:' || publicUrl.origin !== origin || !camera)
+  if (publicUrl.protocol !== (lan ? 'http:' : 'https:') || publicUrl.origin !== origin ||
+      !camera || (lan && !lanNetwork))
     throw new Error('Invalid viewer configuration');
 
   const store = accessStore(directory);
@@ -140,7 +143,7 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
     store, sessionTtlMs, householdSessionTtlMs: sessionTtlMs,
     allowPrincipalAccessInHousehold: true, allowHouseholdInvitations: true,
   });
-  const sidedoor = createAccessHandler({ access, origin, cookieName, name: 'Sony Live Camera' });
+  const sidedoor = lan ? null : createAccessHandler({ access, origin, cookieName, name: 'Sony Live Camera' });
   const ai = createAiConfig(directory);
   const previewSettings = new FileStateStore({
     path: join(directory, 'preview.json'),
@@ -169,6 +172,10 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
   }
 
   async function authenticate(request, ownerOnly, principalOnly = false) {
+    if (lan) {
+      if (ownerOnly || principalOnly) throw new AccessError('forbidden');
+      return { role: 'viewer' };
+    }
     const token = requestToken(request);
     const { principal, session } = await access.authenticate(token);
     const admin = session.principalId !== null && principal?.role === 'owner' && session.principalId === principal.id;
@@ -263,10 +270,16 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
     response.setHeader('Cache-Control', 'private, no-store');
     response.setHeader('X-Content-Type-Options', 'nosniff');
     response.setHeader('Referrer-Policy', 'no-referrer');
-    response.setHeader('Strict-Transport-Security', 'max-age=31536000');
+    if (!lan) response.setHeader('Strict-Transport-Security', 'max-age=31536000');
     response.setHeader('Content-Security-Policy',
       "default-src 'self'; img-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'");
     if (request.headers.host !== publicUrl.host) return send(response, 403, { error: 'Forbidden.' });
+    if (lan && (!request.socket.remoteAddress || request.socket.remoteFamily !== 'IPv4' ||
+        !lanNetwork.check(request.socket.remoteAddress, 'ipv4') ||
+        request.headers['sec-fetch-site'] === 'cross-site' ||
+        ['forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'cf-connecting-ip']
+          .some((header) => request.headers[header] !== undefined)))
+      return send(response, 403, { error: 'Local Wi-Fi access only.' });
     const path = request.url;
     if (request.headers['x-forwarded-proto'] === 'http') {
       if (request.method !== 'GET' && request.method !== 'HEAD')
@@ -280,9 +293,10 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
     const accessAction = path.startsWith('/access/') ? path.slice(8) : null;
     const photoRoute = request.method === 'GET' && /^\/(thumbnail|photo|download)\/([^/?]+)$/.exec(path);
     if (guest && !(request.method === 'GET' && (
-      ['/', '/viewer.css', '/viewer.js', '/admin.js', '/passkey-client.js', '/session', '/photos', '/stream'].includes(path) ||
+      ['/', '/viewer.css', '/viewer.js', '/admin.js', '/session', '/photos', '/stream'].includes(path) ||
+      (!lan && path === '/passkey-client.js') ||
       photoRoute
-    )) && !(request.method === 'POST' && guestAccessPosts.has(accessAction)))
+    )) && !(!lan && request.method === 'POST' && guestAccessPosts.has(accessAction)))
       return send(response, 404, { error: 'Not found.' });
     if (request.method === 'POST' && (request.headers.origin !== origin ||
         request.headers['sec-fetch-site'] === 'cross-site')) return send(response, 403, { error: 'Forbidden.' });
@@ -301,8 +315,9 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
       const [body, type] = assets.get(assetPath);
       if (assetPath === '/') {
         const guestAttr = guest ? ' data-guest' : '';
-        const familyAttr = familyEnabled && (guest || shared) ? ' data-family' : '';
-        return send(response, 200, body.toString().replace('<body>', `<body${guestAttr}${familyAttr}>`), type);
+        const lanAttr = lan ? ' data-lan' : '';
+        const familyAttr = !lan && familyEnabled && (guest || shared) ? ' data-family' : '';
+        return send(response, 200, body.toString().replace('<body>', `<body${guestAttr}${familyAttr}${lanAttr}>`), type);
       }
       return send(response, 200, body, type);
     }
@@ -395,6 +410,25 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
   return server;
 }
 
+async function startLanViewer(options, origin, interfaceName) {
+  const network = networkInterfaces()[interfaceName]
+    ?.find(({ family, internal, cidr }) => family === 'IPv4' && !internal && cidr);
+  if (!network) {
+    setTimeout(() => void startLanViewer(options, origin, interfaceName), 10000);
+    return;
+  }
+  try {
+    const [address, prefix] = network.cidr.split('/');
+    const lanNetwork = new BlockList();
+    lanNetwork.addSubnet(address, Number(prefix), 'ipv4');
+    const lan = await createViewer({ ...options, origin, mode: 'lan', lanNetwork });
+    lan.on('error', (error) => console.error('LAN viewer:', error.code));
+    lan.listen(Number(new URL(origin).port || 80), network.address);
+  } catch (error) {
+    console.error('LAN viewer:', error.message);
+  }
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const directory = process.env.STATE_DIRECTORY;
   if (['setup', 'setup-family'].includes(process.argv[2])) {
@@ -426,5 +460,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const broker = await createViewer({ ...options, origin: viewerOrigin, mode: shared ? 'shared' : 'guest' });
     const brokerPath = join(process.env.RUNTIME_DIRECTORY, 'guest.sock');
     broker.listen(brokerPath, async () => { await chmod(brokerPath, 0o660); });
+    const lanOrigin = process.env.LAN_VIEWER_ORIGIN;
+    if (lanOrigin)
+      void startLanViewer(options, lanOrigin, process.env.LAN_VIEWER_INTERFACE ?? 'wlan0');
   }
 }

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { createServer, request } from 'node:http';
+import { BlockList } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -11,15 +12,46 @@ import { createRelay } from '../camera/sidedoor/web/relay.mjs';
 const origin = 'https://camera.example.test';
 const password = 'valid-admin-password';
 
+test('LAN peers can read the gallery without gaining access to controls', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'sony-camera-lan-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await initializeAdmin(directory, password);
+  const camera = { async json() { return { status: 200, data: [{ name: 'bird.jpg' }] }; } };
+  const network = new BlockList();
+  network.addSubnet('127.0.0.1', 32, 'ipv4');
+  const origin = 'http://camera.example.test';
+  const server = await createViewer({ origin, directory, camera, mode: 'lan', lanNetwork: network });
+  t.after(() => server.close());
+  const port = await listen(server);
+  const session = await call(port, '/session');
+  assert.equal(session.data.role, 'viewer');
+  assert.equal(session.headers['set-cookie'], undefined);
+  assert.deepEqual((await call(port, '/photos')).data, [{ name: 'bird.jpg' }]);
+  assert.equal((await call(port, '/controls')).status, 404);
+  assert.equal((await call(port, '/access/login', { method: 'POST', body: { password }, site: origin })).status, 404);
+  assert.equal((await call(port, '/session', { host: 'wrong.example.test' })).status, 403);
+  const excluded = await createViewer({ origin, directory, camera, mode: 'lan', lanNetwork: new BlockList() });
+  t.after(() => excluded.close());
+  assert.equal((await call(await listen(excluded), '/photos', {
+    extraHeaders: { 'X-Forwarded-For': '127.0.0.1' },
+  })).status, 403);
+  assert.equal((await call(port, '/stream', {
+    extraHeaders: { 'Sec-Fetch-Site': 'cross-site' },
+  })).status, 403);
+  assert.equal((await call(port, '/photos', {
+    extraHeaders: { 'X-Forwarded-For': '127.0.0.1' },
+  })).status, 403);
+});
+
 async function listen(server) {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   return server.address().port;
 }
 
-function call(port, path, { method = 'GET', body, cookie, site = origin, host = 'camera.example.test', protocol } = {}) {
+function call(port, path, { method = 'GET', body, cookie, site = origin, host = 'camera.example.test', protocol, extraHeaders } = {}) {
   return new Promise((resolve, reject) => {
     const payload = body === undefined ? undefined : Buffer.from(JSON.stringify(body));
-    const headers = { Host: host };
+    const headers = { Host: host, ...extraHeaders };
     if (protocol) headers['X-Forwarded-Proto'] = protocol;
     if (cookie) headers.Cookie = cookie;
     if (method === 'POST') Object.assign(headers, {
