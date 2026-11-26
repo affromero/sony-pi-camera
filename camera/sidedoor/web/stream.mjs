@@ -23,7 +23,8 @@ export async function sendPreviewStream(response, camera, authorize) {
       if (performance.now() >= expiresAt) break;
       if (frame && frame !== previous) {
         if (!previous) response.writeHead(200, {
-          'Content-Type': 'multipart/x-mixed-replace; boundary=sony-preview',
+          // WebKit cancels fetch responses labeled multipart/x-mixed-replace.
+          'Content-Type': 'application/octet-stream',
           'X-Accel-Buffering': 'no',
         });
         response.write(`--sony-preview\r\nContent-Type: image/jpeg\r\nContent-Length: ${frame.length}\r\n\r\n`);

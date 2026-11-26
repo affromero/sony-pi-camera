@@ -208,7 +208,7 @@ test('limits concurrent streams and lets only the admin disconnect active viewer
     });
     streams.push(response);
     assert.equal(response.statusCode, 200);
-    assert.match(response.headers['content-type'], /multipart\/x-mixed-replace/);
+    assert.equal(response.headers['content-type'], 'application/octet-stream');
   }
   assert.equal((await call(port, '/stream', { cookie: family.cookie })).status, 429);
   assert.equal((await call(port, '/settings', { cookie: family.cookie })).status, 404);
@@ -409,7 +409,7 @@ test('keeps viewer invitations read-only and admin AI credentials private', { ti
     t.after(() => outgoing.destroy());
     outgoing.end();
   });
-  assert.match(received.type, /^multipart\/x-mixed-replace/);
+  assert.equal(received.type, 'application/octet-stream');
   assert.match(received.body, /--sony-preview\r\nContent-Type: image\/jpeg/);
   assert.equal((await post('/access/logout', {}, owner.cookie)).status, 200);
   await disconnected;

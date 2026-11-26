@@ -171,10 +171,10 @@ In the viewer's existing `/etc/sony-pi-viewer-USER.conf`, set `LAN_VIEWER_CIDR` 
 
 ```ini
 LAN_VIEWER_CIDR=192.168.4.111/22
-LAN_VIEWER_ORIGIN=http://192.168.4.111:8767
+LAN_VIEWER_ORIGIN=http://192.168.4.111
 ```
 
-For a friendly name, set `LAN_VIEWER_ORIGIN=http://livecamera.local:8767`. The installer provides a service that advertises the name through Avahi without replacing the Pi's own hostname. Install the Avahi tools and enable the service on the Pi under the account that runs the camera.
+For a friendly name, set `LAN_VIEWER_ORIGIN=http://livecamera.local`. The installer provides a service that advertises the name through Avahi without replacing the Pi's own hostname. Install the Avahi tools and enable the service on the Pi under the account that runs the camera.
 
 ```sh
 sudo apt install avahi-utils
