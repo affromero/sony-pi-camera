@@ -85,6 +85,7 @@ button[type="submit"]:hover, #save-passkey:hover { background: #004fa8; }
   align-items: center; gap: .75rem; min-height: 3.75rem; padding: .75rem 1rem;
   color: var(--quiet); font-size: .875rem; }
 .preview-toolbar p { margin: 0; text-align: right; }
+#preview-sleep { justify-self: start; }
 #capture-photo { width: 3rem; min-height: 3rem; padding: 0; border-radius: 50%;
   border: 2px solid #777780; background: var(--ink); box-shadow: inset 0 0 0 3px var(--paper); }
 #capture-photo:hover { background: #414149; }

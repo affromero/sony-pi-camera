@@ -159,6 +159,8 @@ Under **Viewer invitations**, choose **Disconnect all viewers** to sign out curr
 
 The viewer stops streaming when its tab is hidden or after 15 seconds without input. Returning to the tab, moving the pointer, tapping, or pressing a key wakes the preview. Change the timeout under **Preview sleep** in the admin menu. Other viewers pick up the new timeout the next time they open the viewer.
 
+Choose **Sleep preview** to stop streaming in this tab immediately. It stays asleep until you choose **Resume preview**, even if you move the pointer or switch tabs. Other viewers can keep watching.
+
 The rear LCD is controlled on the camera. Enable **Monitor Off** under **Camera Settings2 → DISP Button → Monitor**, then use the camera's DISP button to switch display modes. The α7 III can suspend automatic power save while connected to a computer. [Sony finder and monitor settings](https://helpguide.sony.net/ilc/1720/v1/en/contents/TP0001629732.html) · [Sony power-save guide](https://helpguide.sony.net/ilc/1720/v1/en/contents/TP0001653176.html)
 
 To add a reusable family password, run the viewer's `setup-family` command with the same state directory as the admin setup and supply a separate password on stdin. Restart the viewer afterward. **Open as family** gives access to the live preview and gallery.

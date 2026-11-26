@@ -10,6 +10,7 @@ const status = byId('status');
 const photos = byId('photos');
 const preview = byId('preview');
 const previewStatus = byId('preview-status');
+const previewSleep = byId('preview-sleep');
 const captureButton = byId('capture-photo');
 const captureStatus = byId('capture-status');
 const photoDialog = byId('photo-dialog');
@@ -40,6 +41,7 @@ let idleTimer;
 let idleSeconds = 15;
 let lastActivity = 0;
 let sleeping = false;
+let manualSleep = false;
 let imageUrl;
 let admin = false;
 let streamRequest;
@@ -64,6 +66,13 @@ function stopIdleTimer() {
   idleTimer = undefined;
 }
 
+function setManualSleep(enabled) {
+  manualSleep = enabled;
+  previewSleep.textContent = enabled ? 'Resume preview' : 'Sleep preview';
+  previewSleep.title = enabled ? 'Start streaming in this tab again' :
+    'Stop streaming in this tab until you resume';
+}
+
 function locked() {
   generation++;
   galleryRequest++;
@@ -71,6 +80,7 @@ function locked() {
   stopPreview();
   stopIdleTimer();
   sleeping = false;
+  setManualSleep(false);
   clearFrame();
   previewStatus.hidden = false;
   previewStatus.textContent = 'Waiting for the camera…';
@@ -287,9 +297,10 @@ async function refreshPreview() {
     previewStatus.hidden = false;
     return;
   }
-  if (sleeping) {
+  if (manualSleep || sleeping) {
     clearFrame();
-    previewStatus.textContent = 'Sleep mode. Move the pointer, tap, or press a key to wake the preview.';
+    previewStatus.textContent = manualSleep ? 'Preview asleep. Select Resume preview to start streaming.' :
+      'Sleep mode. Move the pointer, tap, or press a key to wake the preview.';
     previewStatus.hidden = false;
     return;
   }
@@ -328,7 +339,7 @@ function scheduleIdle() {
 }
 
 function noteActivity() {
-  if (document.hidden || camera.hidden) return;
+  if (manualSleep || document.hidden || camera.hidden) return;
   lastActivity = performance.now();
   if (idleTimer === undefined) scheduleIdle();
   if (!sleeping) return;
@@ -469,6 +480,11 @@ captureButton.addEventListener('click', async () => {
   }
 });
 document.addEventListener('visibilitychange', synchronizePreviewVisibility);
+previewSleep.addEventListener('click', () => {
+  setManualSleep(!manualSleep);
+  if (!manualSleep) previewStatus.textContent = 'Connecting to the camera…';
+  synchronizePreviewVisibility();
+});
 window.addEventListener('pagehide', () => {
   stopIdleTimer();
   stopPreview();
