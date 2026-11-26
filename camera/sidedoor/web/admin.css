@@ -1,0 +1,39 @@
+#admin-menu {
+  --line: #dcdce1;
+  position: fixed;
+  inset: 4.5rem max(1rem, calc((100% - 87.5rem) / 2)) auto auto;
+  margin: 0;
+  width: min(27rem, calc(100% - 2rem));
+  max-height: calc(100dvh - 5.5rem);
+  overflow: auto;
+  padding: 1rem;
+  color: #1d1d1f;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  box-shadow: 0 1rem 2rem #1d1d1f20;
+}
+#admin-menu .settings-heading { display: flex; align-items: center; justify-content: space-between; gap: .65rem; margin-bottom: .75rem; }
+#admin-menu details { border-top: 1px solid var(--line); }
+#admin-menu summary { padding: .85rem 0; font-size: .9375rem; font-weight: 600; cursor: pointer; }
+#admin-menu form, #admin-menu fieldset { display: grid; gap: .65rem; min-width: 0; }
+#admin-menu fieldset { border: 0; margin: 0; padding: 0; }
+#admin-menu form { margin-bottom: .8rem; font-size: .9rem; }
+#admin-menu input:not([type="checkbox"]), #admin-menu select, #admin-menu textarea {
+  width: 100%; min-width: 0; padding: .55rem .65rem; border: 1px solid #a7a7af;
+  border-radius: .65rem; font: inherit; color: inherit; background: #fff;
+}
+#admin-menu button { min-height: 2.5rem; padding: .45rem .8rem; border: 1px solid var(--line); border-radius: .65rem; background: #fff; font: inherit; cursor: pointer; }
+#admin-menu button[type="submit"] { background: #0062cc; border-color: #0062cc; color: #fff; }
+#admin-menu button:disabled { opacity: .55; cursor: default; }
+#admin-menu p:empty, #viewer-sessions:empty { display: none; }
+#admin-menu #capture-schedule { padding: 0; margin: 0; border-radius: 0; }
+#schedule-next { font-variant-numeric: tabular-nums; }
+#viewer-sessions { display: grid; gap: .5rem; margin-bottom: .75rem; overflow-wrap: anywhere; }
+#viewer-map { display: block; width: 100%; height: auto; border-radius: .75rem; background: #e5edf8; }
+.viewer-map-legend { font-size: .83rem; }
+#viewer-activity-list { padding-inline-start: 1.25rem; overflow-wrap: anywhere; }
+#viewer-activity-list li + li { margin-top: .5rem; }
+.access-qr { width: fit-content; max-width: 100%; padding: .5rem; background: #fff; }
+.access-qr .sd-qr { max-width: 100%; height: auto !important; }
+.access-qr svg { display: block; width: 100%; height: auto; }

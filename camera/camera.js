@@ -534,14 +534,40 @@ function addScheduleTime(value = '') {
 function scheduleEdited() {
   $('schedule-status').textContent = 'Unsaved changes';
 }
+let nextCaptureAt = null;
+let countdownTimer;
+async function tickSchedule() {
+  clearTimeout(countdownTimer);
+  const countdown = $('schedule-next');
+  if (!$('capture-schedule').open || document.hidden || nextCaptureAt === null) {
+    countdown.hidden = true;
+    return;
+  }
+  const seconds = Math.max(0, Math.ceil(nextCaptureAt - Date.now() / 1000));
+  const pad = value => String(value).padStart(2, '0');
+  countdown.textContent = 'Next capture in ' + pad(Math.floor(seconds / 3600)) +
+    'h:' + pad(Math.floor(seconds / 60) % 60) + 'm:' + pad(seconds % 60) + 's';
+  countdown.hidden = false;
+  if (seconds === 0) {
+    try {
+      const response = await api('/api/schedule');
+      nextCaptureAt = (await response.json()).nextCaptureAt ?? null;
+    } catch (error) {
+      countdown.textContent = error.message;
+    }
+  }
+  countdownTimer = setTimeout(tickSchedule, seconds > 0 ? 1000 : 5000);
+}
 function showSchedule(schedule) {
   $('schedule-times').replaceChildren();
   schedule.times.forEach(value => addScheduleTime(value));
-  $('schedule-zone').value = schedule.timezone;
+  $('schedule-zone').value = (schedule.inheritsTimezone && localZone) || schedule.timezone;
   $('schedule-enabled').checked = schedule.enabled;
   $('schedule-status').textContent = schedule.enabled
     ? 'Scheduled daily at ' + schedule.times.join(', ') + ' (' + schedule.timezone + ').'
     : 'Daily captures are off.';
+  nextCaptureAt = schedule.nextCaptureAt ?? null;
+  void tickSchedule();
 }
 let scheduleLoaded = false;
 let scheduleLoading = false;
@@ -562,12 +588,23 @@ async function loadSchedule() {
     scheduleLoading = false;
   }
 }
-$('capture-schedule').ontoggle = () => { if ($('capture-schedule').open) loadSchedule(); };
+$('capture-schedule').ontoggle = () => {
+  if ($('capture-schedule').open) loadSchedule();
+  void tickSchedule();
+};
+document.addEventListener('visibilitychange', tickSchedule);
 $('schedule-retry').onclick = loadSchedule;
 $('schedule-form').oninput = scheduleEdited;
 $('schedule-add').onclick = () => { addScheduleTime().focus(); scheduleEdited(); };
 for (const zone of new Set(['UTC', ...(Intl.supportedValuesOf?.('timeZone') || [])])) {
   $('schedule-zones').append(new Option(zone));
+}
+const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+if (localZone) {
+  const localZoneButton = $('schedule-local-zone');
+  localZoneButton.hidden = false;
+  localZoneButton.title = 'Use ' + localZone + ' for daily capture times';
+  localZoneButton.onclick = () => { $('schedule-zone').value = localZone; scheduleEdited(); };
 }
 $('schedule-form').onsubmit = async event => {
   event.preventDefault();
@@ -594,6 +631,10 @@ $('schedule-form').onsubmit = async event => {
   }
 };
 if (sidedoor) {
+  $('admin-schedule-slot')?.replaceWith($('capture-schedule'));
+  $('admin-menu')?.addEventListener('toggle', () => {
+    if (!$('admin-menu').matches(':popover-open')) $('capture-schedule').open = false;
+  });
   $('controls-lock').onclick = async () => {
     try {
       const response = await fetch('/access/logout', {method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});

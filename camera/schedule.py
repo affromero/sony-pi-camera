@@ -8,6 +8,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -61,6 +62,7 @@ def ctl(*args: str) -> str:
         capture_output=True,
         text=True,
         timeout=20,
+        env={**os.environ, "LC_ALL": "C", "TZ": "UTC"},
     )
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or "Systemd command failed.")
@@ -78,7 +80,7 @@ def pi_timezone() -> str:
     return timezone(result.stdout.strip())
 
 
-def daily_times(unit_text: str) -> tuple[list[str], str]:
+def daily_times(unit_text: str) -> tuple[list[str], str, bool]:
     section = ""
     calendar: list[str] = []
     for line in unit_text.splitlines():
@@ -100,15 +102,17 @@ def daily_times(unit_text: str) -> tuple[list[str], str]:
             raise RuntimeError(f"Timer uses administrator setting {key}.")
     times = []
     zones = set()
+    inherits_timezone = True
     for entry in calendar:
         match = re.fullmatch(rf"\*-\*-\* ({TIME})(?::00)?(?: (\S+))?", entry)
         if not match:
             raise RuntimeError("Timer uses a custom calendar expression.")
         times.append(match[1])
         zones.add(match[2] or pi_timezone())
+        inherits_timezone = inherits_timezone and match[2] is None
     if len(zones) != 1:
         raise RuntimeError("Timer needs daily times in one timezone.")
-    return times, zones.pop()
+    return times, zones.pop(), inherits_timezone
 
 
 def state(unit: str) -> dict:
@@ -124,7 +128,7 @@ def state(unit: str) -> dict:
         properties["ActiveState"],
     ) not in {("enabled", "active"), ("disabled", "inactive")}:
         raise RuntimeError("Timer state requires administrator attention.")
-    times, zone = daily_times(ctl("cat", unit))
+    times, zone, _ = daily_times(ctl("cat", unit))
     return validate(
         dict(enabled=enabled == "enabled", times=times, timezone=zone)
     )
@@ -142,6 +146,24 @@ def replace(path: Path, content: str) -> None:
             temp.replace(path)
         finally:
             temp.unlink(missing_ok=True)
+
+
+def schedule_response(unit: str, settings: dict) -> dict:
+    next_capture_at = None
+    inherits_timezone = False
+    if settings["enabled"]:
+        stamp = ctl("show", "-p", "NextElapseUSecRealtime", "--value", unit)
+        if stamp and stamp != "n/a":
+            date_and_time = stamp.split()[1:3]
+            stamp_utc = datetime.fromisoformat(" ".join(date_and_time))
+            next_capture_at = int(stamp_utc.replace(tzinfo=UTC).timestamp())
+    else:
+        _, _, inherits_timezone = daily_times(ctl("cat", unit))
+    return {
+        **settings,
+        "nextCaptureAt": next_capture_at,
+        "inheritsTimezone": inherits_timezone,
+    }
 
 
 def update(unit: str, data: object) -> dict:
@@ -165,7 +187,7 @@ def update(unit: str, data: object) -> dict:
     try:
         replace(path, content)
         ctl("daemon-reload")
-        if daily_times(ctl("cat", unit)) != (
+        if daily_times(ctl("cat", unit))[:2] != (
             requested["times"],
             requested["timezone"],
         ):
@@ -207,6 +229,7 @@ def serve(user: str) -> None:
                         response = update(unit, msg["update"])
                     else:
                         raise ValueError("Invalid schedule request.")
+                    response = schedule_response(unit, response)
                 except (
                     OSError,
                     ValueError,

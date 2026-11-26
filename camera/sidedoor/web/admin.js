@@ -1,16 +1,13 @@
+import { post } from './request.js';
+
 const byId = (id) => document.getElementById(id);
-const section = byId('admin');
 const status = byId('admin-status');
-const settingsStatus = byId('settings-status');
 const menu = byId('admin-menu');
 const inviteLink = byId('invite-link');
-const settings = byId('settings');
 const sessions = byId('viewer-sessions');
 const disconnectViewers = byId('disconnect-viewers');
 const sessionStatus = byId('viewer-session-status');
 const ai = byId('ai');
-const schedule = byId('schedule');
-const scheduleFields = byId('schedule-fields');
 const previewIdle = byId('preview-idle');
 const previewSettingsStatus = byId('preview-settings-status');
 const activity = byId('viewer-activity');
@@ -23,18 +20,6 @@ let mapPaths;
 let activityTimer;
 let generation = 0;
 const qrCleanup = new Map();
-const settingLabels = {
-  iso: 'ISO',
-  shutterspeed: 'Shutter speed',
-  'f-number': 'Aperture',
-  whitebalance: 'White balance',
-  focusmode: 'Focus mode',
-  focusarea: 'Focus area',
-  sensorcrop: 'Sensor crop',
-  exposurecompensation: 'Exposure compensation',
-  imagequality: 'Image quality',
-};
-
 function clearQr(container) {
   qrCleanup.get(container)?.();
   qrCleanup.delete(container);
@@ -47,21 +32,6 @@ async function showQr(container, value, current) {
   clearQr(container);
   qrCleanup.set(container, renderQr(container, value));
   container.hidden = false;
-}
-
-export async function post(path, body = {}) {
-  const response = await fetch(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const data = await response.json();
-  if (!response.ok) {
-    const error = new Error(data.error || 'Request failed.');
-    error.status = response.status;
-    throw error;
-  }
-  return data;
 }
 
 async function get(path) {
@@ -79,50 +49,6 @@ async function act(operation, message = status) {
   } catch (error) {
     if (generation === current) message.textContent = error.message;
   }
-}
-
-async function loadSettings(current) {
-  const data = await get('/settings');
-  if (generation !== current) return;
-  const fields = [];
-  for (const [name, title] of Object.entries(settingLabels)) {
-    const setting = data[name];
-    if (!setting || !setting.current) continue;
-    const row = document.createElement('div');
-    row.className = 'setting-row';
-    const editable = !setting.readonly && setting.choices?.length;
-    const caption = document.createElement(editable ? 'label' : 'span');
-    caption.textContent = title;
-    row.append(caption);
-    if (!editable) {
-      const value = document.createElement('span');
-      value.className = 'setting-value';
-      value.textContent = setting.current;
-      row.append(value);
-    } else {
-      const select = document.createElement('select');
-      select.id = 'camera-setting-' + name;
-      caption.htmlFor = select.id;
-      const choices = [...new Set([setting.current, ...setting.choices])];
-      select.append(...choices.map((value) => new Option(value, value, false, value === setting.current)));
-      let confirmed = setting.current;
-      select.onchange = () => act(async () => {
-        const value = select.value;
-        select.value = confirmed;
-        select.disabled = true;
-        try {
-          const result = await post('/setting', { name, value });
-          confirmed = result.current;
-          select.value = confirmed;
-        } finally {
-          select.disabled = false;
-        }
-      }, settingsStatus);
-      row.append(select);
-    }
-    fields.push(row);
-  }
-  settings.replaceChildren(...fields);
 }
 
 async function loadSessions(current) {
@@ -168,7 +94,7 @@ function renderActivity(viewers) {
 async function updateActivity() {
   clearTimeout(activityTimer);
   const current = generation;
-  const visible = () => current === generation && !section.hidden && activity.open &&
+  const visible = () => current === generation && activity.open &&
     menu.matches(':popover-open') && !document.hidden;
   if (!visible()) return;
   try {
@@ -205,40 +131,6 @@ function renderAi(data) {
   key.placeholder = data.hasKey ? 'Saved. Enter a new key to replace it.' : '';
 }
 
-export function showAdmin(enabled, idleSeconds) {
-  const current = ++generation;
-  section.hidden = !enabled;
-  byId('open-admin-menu').hidden = !enabled;
-  status.textContent = '';
-  settingsStatus.textContent = '';
-  sessionStatus.textContent = '';
-  previewSettingsStatus.textContent = '';
-  if (enabled) {
-    previewIdle.value = idleSeconds;
-    void act(async () => {
-      const data = await get('/ai');
-      if (current === generation) renderAi(data);
-    });
-    return act(loadSettings, settingsStatus);
-  }
-  menu.hidePopover();
-  schedule.reset();
-  scheduleFields.disabled = true;
-  clearQr(byId('admin-qr'));
-  clearQr(byId('invite-qr'));
-  ai.reset();
-  byId('issue').reset();
-  inviteLink.value = '';
-  inviteLink.hidden = inviteLink.labels[0].hidden = true;
-  settings.replaceChildren();
-  sessions.replaceChildren();
-  clearTimeout(activityTimer);
-  activityList.replaceChildren();
-  activityStatus.textContent = '';
-  viewerMap.getContext('2d').clearRect(0, 0, viewerMap.width, viewerMap.height);
-  for (const details of menu.querySelectorAll('details')) details.open = false;
-}
-
 byId('preview-settings').onsubmit = (event) => {
   event.preventDefault();
   const button = event.submitter;
@@ -248,7 +140,6 @@ byId('preview-settings').onsubmit = (event) => {
       const { idleSeconds } = await post('/preview-settings', { idleSeconds: previewIdle.valueAsNumber });
       if (generation !== current) return;
       previewIdle.value = idleSeconds;
-      document.dispatchEvent(new CustomEvent('preview-timeout', { detail: idleSeconds }));
       previewSettingsStatus.textContent = 'Preview timeout saved.';
     } finally {
       if (button) button.disabled = false;
@@ -256,41 +147,6 @@ byId('preview-settings').onsubmit = (event) => {
   }, previewSettingsStatus);
 };
 
-function showSchedule(data) {
-  byId('schedule-enabled').checked = data.enabled;
-  byId('schedule-times').value = data.times.join(', ');
-  byId('schedule-zone').value = data.timezone;
-}
-
-schedule.closest('details').addEventListener('toggle', () => {
-  if (!schedule.closest('details').open || !scheduleFields.disabled) return;
-  void act(async (current) => {
-    const data = await get('/schedule');
-    if (generation !== current) return;
-    showSchedule(data);
-    scheduleFields.disabled = false;
-  });
-});
-
-schedule.onsubmit = (event) => {
-  event.preventDefault();
-  void act(async (current) => {
-    const body = {
-      enabled: byId('schedule-enabled').checked,
-      times: byId('schedule-times').value.split(',').map((time) => time.trim()),
-      timezone: byId('schedule-zone').value.trim(),
-    };
-    scheduleFields.disabled = true;
-    try {
-      const data = await post('/schedule', body);
-      if (generation !== current) return;
-      showSchedule(data);
-      status.textContent = 'Capture schedule saved.';
-    } finally {
-      if (generation === current) scheduleFields.disabled = false;
-    }
-  });
-};
 byId('show-admin-qr').onclick = () => act((current) =>
   showQr(byId('admin-qr'), location.origin + '/', current));
 sessions.closest('details').addEventListener('toggle', () => {
@@ -355,3 +211,20 @@ ai.onsubmit = (event) => {
     status.textContent = 'AI settings saved.';
   });
 };
+
+menu.addEventListener('toggle', () => {
+  if (menu.matches(':popover-open')) {
+    void act(async (current) => {
+      const [session, data] = await Promise.all([get('/session'), get('/ai')]);
+      if (generation !== current) return;
+      previewIdle.value = session.idleSeconds;
+      renderAi(data);
+    });
+    return;
+  }
+  generation++;
+  clearQr(byId('admin-qr'));
+  clearQr(byId('invite-qr'));
+  byId('confirm-password').value = '';
+  byId('ai-key').value = '';
+});

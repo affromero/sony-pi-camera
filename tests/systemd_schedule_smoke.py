@@ -53,6 +53,7 @@ def main() -> None:
         request(token, schedule)
         current = request(token)
         assert all(current[k] == v for k, v in schedule.items()), current
+        assert current["nextCaptureAt"] > 0, current
         subprocess.run(["systemctl", "is-active", "--quiet", unit], check=True)
         subprocess.run(
             ["systemctl", "is-enabled", "--quiet", unit], check=True

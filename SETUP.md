@@ -155,7 +155,9 @@ Sign in as admin and create a link under **Viewer invitations**. Share the link 
 
 After admin sign-in, the shared site opens the same camera controls used on the Pi. Use the menu at the top right to manage invitations and AI advice.
 
-Under **Viewer invitations**, choose **Disconnect signed-in viewers** to sign out current family and invitation sessions and stop their live previews. Family members can sign in again with their password, and unused invitations still work. Your preview pauses while the administration menu is open.
+Open the administration menu from the camera controls. Under **Viewer invitations**, choose **Disconnect signed-in viewers** to sign out family and invitation sessions and stop their live previews. Family members can sign in again with their password, and unused invitations still work.
+
+Under **Scheduled captures**, use **Add time** to schedule up to 24 daily captures. Choose **Use my time zone** to use the browser's time zone, then save. When the schedule is enabled, the countdown shows the Pi timer's next run.
 
 Open **Live viewers** in the admin menu to see connected previews, their access type, IP address, and connection time. The map shades countries by the number of live previews. IP location is approximate. Local Wi-Fi viewers appear in the list. The Pi keeps these details in memory until the stream closes.
 

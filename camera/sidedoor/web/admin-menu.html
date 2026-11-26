@@ -1,0 +1,61 @@
+<section id="admin-menu" popover aria-labelledby="admin-menu-title">
+        <div class="settings-heading">
+          <h2 id="admin-menu-title">Camera administration</h2>
+          <button type="button" popovertarget="admin-menu" popovertargetaction="hide" aria-label="Close administration" title="Dismiss this menu">Close</button>
+        </div>
+        <details>
+          <summary title="Choose how long the viewer streams without interaction">Preview sleep</summary>
+          <form id="preview-settings">
+            <label for="preview-idle">Sleep after inactivity (seconds)</label>
+            <input id="preview-idle" type="number" min="5" max="300" step="1" required>
+            <button type="submit" title="Save the preview inactivity timeout">Save timeout</button>
+            <p id="preview-settings-status" role="status"></p>
+          </form>
+        </details>
+        <details>
+          <summary title="Share the camera admin sign-in page">Camera access</summary>
+          <button id="show-admin-qr" type="button" title="Show a scannable link to the admin password prompt">Show admin login QR code</button>
+          <div id="admin-qr" class="access-qr" role="img" aria-label="QR code for the camera admin login" hidden></div>
+        </details>
+        <details id="viewer-activity">
+          <summary title="See who is receiving the live preview">Live viewers</summary>
+          <p>Approximate country by IP. Wi-Fi viewers appear in the list.</p>
+          <canvas id="viewer-map" width="720" height="360" role="img" aria-label="Viewer count by country"></canvas>
+          <p class="viewer-map-legend">Darker blue means more live previews.</p>
+          <p id="viewer-activity-status" role="status"></p>
+          <ul id="viewer-activity-list"></ul>
+        </details>
+        <details>
+          <summary title="Invite a viewer or revoke an existing viewer session">Viewer invitations</summary>
+          <form id="issue">
+            <label for="confirm-password">Admin password</label>
+            <input id="confirm-password" type="password" autocomplete="current-password" required>
+            <button type="submit" title="Create a link and QR code one viewer can redeem">Create single-use invitation</button>
+            <label for="invite-link" hidden>Invitation link</label>
+            <input id="invite-link" type="text" readonly hidden>
+            <div id="invite-qr" class="access-qr" role="img" aria-label="QR code for the single-use viewer invitation" hidden></div>
+          </form>
+          <button id="disconnect-viewers" type="button" title="Sign out all current family and invitation viewers">Disconnect signed-in viewers</button>
+          <p id="viewer-session-status" role="status"></p>
+          <div id="viewer-sessions"></div>
+        </details>
+        <div id="admin-schedule-slot"></div>
+        <details>
+          <summary title="Choose how a vision model advises the camera before a shot">AI advice for scheduled captures</summary>
+          <form id="ai">
+            <label><input id="ai-enabled" type="checkbox"> Analyze a preview before each scheduled shot</label>
+            <label><input id="ai-required" type="checkbox"> Require AI advice before capture</label>
+            <label for="ai-provider">Provider</label>
+            <select id="ai-provider"><option value="">Choose provider</option></select>
+            <label for="ai-model">Vision model</label>
+            <input id="ai-model" type="text" maxlength="120">
+            <label for="ai-key">Provider API key</label>
+            <input id="ai-key" type="password" maxlength="4096" autocomplete="off">
+            <label for="ai-prompt">Photo goal</label>
+            <textarea id="ai-prompt" maxlength="2000" rows="4"></textarea>
+            <button type="submit" title="Save the provider, model and photo goal">Save AI settings</button>
+            <button id="check-ai" type="button" title="Check whether the provider accepts the saved credential">Check saved API key</button>
+          </form>
+        </details>
+        <p id="admin-status" role="status"></p>
+      </section>

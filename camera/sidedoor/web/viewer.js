@@ -1,18 +1,15 @@
-import { post, showAdmin } from './admin.js';
+import { post } from './request.js';
 
 const byId = (id) => document.getElementById(id);
 const unlock = byId('unlock');
 const invite = byId('invite');
 const lock = byId('lock');
 const camera = byId('camera');
-const adminMenu = byId('admin-menu');
 const status = byId('status');
 const photos = byId('photos');
 const preview = byId('preview');
 const previewStatus = byId('preview-status');
 const previewSleep = byId('preview-sleep');
-const captureButton = byId('capture-photo');
-const captureStatus = byId('capture-status');
 const photoDialog = byId('photo-dialog');
 const photoFull = byId('photo-full');
 const photoStatus = byId('photo-status');
@@ -39,7 +36,6 @@ let lastActivity = 0;
 let sleeping = false;
 let manualSleep = false;
 let imageUrl;
-let admin = false;
 let streamRequest;
 let inviteCode = lanPage ? null : new URLSearchParams(location.hash.slice(1)).get('invite');
 if (inviteCode) history.replaceState(null, '', location.pathname);
@@ -83,15 +79,11 @@ function locked() {
   photos.replaceChildren();
   photoDialog.close();
   camera.hidden = lock.hidden = true;
-  captureButton.hidden = true;
-  captureStatus.textContent = '';
   passkeyOffer.hidden = true;
   invite.hidden = !inviteCode;
   unlock.hidden = lanPage || Boolean(inviteCode) || (guestPage && !familyLogin);
   if (unlock.hidden && !inviteCode && guestPage && !lanPage)
     status.textContent = 'Open the invitation link from the camera owner.';
-  admin = false;
-  showAdmin(false);
 }
 
 const fileSize = (bytes) => bytes < 1_000_000 ? `${Math.ceil(bytes / 1000)} KB` :
@@ -203,24 +195,6 @@ function renderPhotos(entries) {
     const actions = document.createElement('div');
     actions.className = 'photo-actions';
     actions.append(size);
-    if (admin) {
-      const remove = document.createElement('button');
-      remove.type = 'button';
-      remove.textContent = 'Delete';
-      remove.title = 'Delete this saved copy from the Pi';
-      remove.setAttribute('aria-label', 'Delete ' + name);
-      remove.onclick = async () => {
-        if (!confirm('Delete ' + name + ' from the Pi?')) return;
-        try {
-          await post('/delete', { name });
-          await loadPhotos();
-        } catch (error) {
-          if (error.status === 401) locked();
-          status.textContent = error.message;
-        }
-      };
-      actions.append(remove);
-    }
     row.append(link, actions);
     return row;
   });
@@ -288,11 +262,6 @@ async function refreshPreview() {
   stopPreview();
   const current = previewGeneration;
   if (document.hidden || camera.hidden || photoDialog.open) return;
-  if (admin && adminMenu.matches(':popover-open')) {
-    previewStatus.textContent = 'Preview paused while administration is open.';
-    previewStatus.hidden = false;
-    return;
-  }
   if (manualSleep || sleeping) {
     clearFrame();
     previewStatus.textContent = manualSleep ? 'Preview asleep. Select Resume preview to start streaming.' :
@@ -459,21 +428,6 @@ lock.addEventListener('click', async () => {
     status.textContent = 'Could not sign out. Try again.';
   }
 });
-captureButton.addEventListener('click', async () => {
-  const current = generation;
-  captureButton.disabled = true;
-  captureStatus.textContent = 'Taking photo…';
-  try {
-    await post('/capture');
-    if (current !== generation) return;
-    captureStatus.textContent = 'Photo saved.';
-    await loadPhotos();
-  } catch (error) {
-    if (current === generation) captureStatus.textContent = error.message;
-  } finally {
-    captureButton.disabled = false;
-  }
-});
 document.addEventListener('visibilitychange', synchronizePreviewVisibility);
 previewSleep.addEventListener('click', () => {
   setManualSleep(!manualSleep);
@@ -490,14 +444,6 @@ window.addEventListener('pageshow', (event) => {
 for (const event of ['pointermove', 'pointerdown', 'keydown', 'wheel', 'change']) {
   document.addEventListener(event, noteActivity, { passive: true });
 }
-document.addEventListener('preview-timeout', (event) => {
-  idleSeconds = event.detail;
-  stopIdleTimer();
-  noteActivity();
-});
-adminMenu.addEventListener('toggle', () => {
-  if (admin) void refreshPreview();
-});
 function syncGallery() {
   if (!document.hidden && !camera.hidden) void loadPhotos();
 }
@@ -511,18 +457,15 @@ async function enter() {
   const { role } = session;
   passkeyOffer.hidden = true;
   idleSeconds = session.idleSeconds ?? 15;
-  admin = role === 'admin';
-  if (admin && location.search !== '?manage=1') {
+  if (role === 'admin') {
     location.replace('/controls');
     return;
   }
   camera.hidden = false;
   lock.hidden = lanPage;
-  captureButton.hidden = !admin;
   unlock.hidden = invite.hidden = true;
   const current = generation;
-  await Promise.all([showAdmin(admin, idleSeconds), loadPhotos()]);
-  if (admin && current === generation) adminMenu.showPopover();
+  await loadPhotos();
   if (current === generation) synchronizePreviewVisibility();
 }
 void enter().catch(() => {

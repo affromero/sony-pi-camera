@@ -332,6 +332,11 @@ test('keeps viewer invitations read-only and admin AI credentials private', { ti
   assert.equal(controls.status, 200);
   assert.match(controls.data.toString(), /<body data-sidedoor>/);
   assert.match(controls.data.toString(), /id="focus-target"/);
+  assert.match(controls.data.toString(), /popovertarget="admin-menu"/);
+  assert.match(controls.data.toString(), /id="admin-menu" popover/);
+  assert.equal((await get('/admin.js')).status, 401);
+  assert.equal((await get('/admin.js', owner.cookie)).status, 200);
+  assert.equal((await get('/?manage=1', owner.cookie)).status, 404);
   const controlPreview = await get('/api/preview', owner.cookie);
   assert.equal(controlPreview.headers['x-magnification'], '5.9');
   assert.equal(controlPreview.data.toString(), 'jpeg');

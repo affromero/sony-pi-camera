@@ -9,7 +9,7 @@
 <div><strong id="battery-level">Unavailable</strong><small id="battery-state"></small></div></div>
 <div class="sidedoor-actions">
 <button type="button" id="controls-lock" title="End your camera session on this device">Sign out</button>
-<a href="/?manage=1" aria-label="Camera administration" title="Manage access, capture schedules and AI advice">☰</a>
+<button type="button" popovertarget="admin-menu" aria-label="Camera administration" title="Manage access, capture schedules and AI advice">☰</button>
 </div></header>
 <div id="login" class="login" hidden><form id="login-form"><h1>Camera access</h1><p>Enter the camera access key for this Pi.</p><label>Access key <input id="access-key" type="password" required autocomplete="off"></label><button type="submit">Open camera</button><p id="login-error" role="alert"></p></form></div>
 <main><div class="heading"><div><p>SONY α7 III</p><h1>Camera</h1></div><span id="status" role="status">Connecting…</span></div>
@@ -27,8 +27,10 @@
 <button class="secondary" type="button" id="schedule-add">Add time</button>
 <label>Time zone <input id="schedule-zone" list="schedule-zones" required placeholder="America/Chicago"></label>
 <datalist id="schedule-zones"></datalist>
+<button class="secondary" type="button" id="schedule-local-zone" hidden>Use my time zone</button>
 <button class="secondary" type="submit" title="Apply the selected daily capture times and time zone">Save schedule</button>
 </fieldset></form><p role="status" id="schedule-status"></p>
+<p id="schedule-next" hidden></p>
 <button class="secondary" id="schedule-retry" hidden>Retry loading schedule</button></details>
 <section class="library"><h2>Photos on the Pi</h2>
 <div class="gallery-filters">
@@ -38,4 +40,5 @@
 </div><div id="photos" class="photos"></div><p id="photos-message" role="status"></p></section></main>
 <dialog id="photo-dialog"><div class="modal"><div class="modal-bar"><span id="modal-name"></span><div><button id="modal-zoom" disabled>100%</button><button id="modal-download">Download</button><button id="modal-delete">Delete</button><button id="modal-close" aria-label="Close">✕</button></div></div>
 <div class="modal-image"><img id="modal-photo" alt=""><div id="photo-loading"><strong id="load-percent"></strong><progress id="load-progress" max="100" aria-label="Original photo download"></progress><small id="load-bytes"></small></div><p id="modal-status" role="status" hidden></p></div></div></dialog>
+<!-- camera-administration -->
 </body></html>

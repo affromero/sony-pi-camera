@@ -86,3 +86,24 @@ class ScheduleTest(unittest.TestCase):
         for value in ("Mon 12:00", "*-*-* 12:30:20 UTC"):
             with self.subTest(value=value), self.assertRaises(RuntimeError):
                 schedule.daily_times("[Timer]\nOnCalendar=" + value)
+
+    def test_reports_the_running_timers_next_capture(self):
+        settings = dict(enabled=True, times=["08:00", "12:30"], timezone="UTC")
+        with mock.patch.object(
+            schedule, "ctl", return_value="Thu 1970-01-01 12:30:00 UTC"
+        ):
+            self.assertEqual(
+                schedule.schedule_response(UNIT, settings)["nextCaptureAt"],
+                45000,
+            )
+
+    def test_distinguishes_inherited_and_explicit_timezones(self):
+        with mock.patch.object(
+            schedule, "pi_timezone", return_value="Europe/London"
+        ):
+            self.assertTrue(
+                schedule.daily_times("[Timer]\nOnCalendar=*-*-* 12:30")[2]
+            )
+            self.assertFalse(
+                schedule.daily_times("[Timer]\nOnCalendar=*-*-* 12:30 UTC")[2]
+            )

@@ -27,7 +27,7 @@ const assets = new Map(await Promise.all([
   ['/', 'index.html', 'text/html; charset=utf-8'],
   ['/viewer.css', 'viewer.css', 'text/css; charset=utf-8'],
   ['/viewer.js', 'viewer.js', 'text/javascript; charset=utf-8'],
-  ['/admin.js', 'admin.js', 'text/javascript; charset=utf-8'],
+  ['/request.js', 'request.js', 'text/javascript; charset=utf-8'],
 ].map(async ([path, file, type]) =>
   [path, [await readFile(new URL(file, import.meta.url)), type]])));
 
@@ -51,6 +51,10 @@ const controlAssets = new Map([
   ['/controls', ['camera.html', 'text/html; charset=utf-8']],
   ['/camera.js', ['camera.js', 'text/javascript; charset=utf-8']],
   ['/camera.css', ['camera.css', 'text/css; charset=utf-8']],
+]);
+const adminAssets = new Map([
+  ['/admin.js', ['admin.js', 'text/javascript; charset=utf-8']],
+  ['/admin.css', ['admin.css', 'text/css; charset=utf-8']],
 ]);
 const controlRoutes = new Set([
   'GET /api/preview', 'GET /api/settings', 'GET /api/schedule',
@@ -316,7 +320,7 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
     const accessAction = path.startsWith('/access/') ? path.slice(8) : null;
     const photoRoute = request.method === 'GET' && /^\/(thumbnail|photo|download)\/([^/?]+)$/.exec(path);
     if (guest && !(request.method === 'GET' && (
-      ['/', '/viewer.css', '/viewer.js', '/admin.js', '/session', '/photos', '/stream'].includes(path) ||
+      ['/', '/viewer.css', '/viewer.js', '/request.js', '/session', '/photos', '/stream'].includes(path) ||
       (!lan && path === '/passkey-client.js') ||
       photoRoute
     )) && !(!lan && request.method === 'POST' && guestAccessPosts.has(accessAction)))
@@ -333,10 +337,9 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
       const script = await readFile(new URL('admin-qr.js', import.meta.url));
       return send(response, 200, script, 'text/javascript; charset=utf-8');
     }
-    const assetPath = path === '/?manage=1' && !guest ? '/' : path;
-    if (request.method === 'GET' && assets.has(assetPath)) {
-      const [body, type] = assets.get(assetPath);
-      if (assetPath === '/') {
+    if (request.method === 'GET' && assets.has(path)) {
+      const [body, type] = assets.get(path);
+      if (path === '/') {
         const guestAttr = guest ? ' data-guest' : '';
         const lanAttr = lan ? ' data-lan' : '';
         const familyAttr = !lan && familyEnabled && (guest || shared) ? ' data-family' : '';
@@ -344,11 +347,21 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
       }
       return send(response, 200, body, type);
     }
+    if (request.method === 'GET' && adminAssets.has(path)) {
+      await authenticate(request, true);
+      const [file, type] = adminAssets.get(path);
+      return send(response, 200, await readFile(new URL(file, import.meta.url)), type);
+    }
     if (request.method === 'GET' && controlAssets.has(path)) {
       await authenticate(request, true);
       const [file, type] = controlAssets.get(path);
       let content = await readFile(new URL('../../' + file, import.meta.url), 'utf8');
-      if (path === '/controls') content = content.replace('<body>', '<body data-sidedoor>');
+      if (path === '/controls') {
+        const menu = await readFile(new URL('admin-menu.html', import.meta.url), 'utf8');
+        content = content.replace('<body>', '<body data-sidedoor>')
+          .replace('</head>', '<link rel="stylesheet" href="/admin.css"><script type="module" src="/admin.js"></script></head>')
+          .replace('<!-- camera-administration -->', menu);
+      }
       return send(response, 200, content, type);
     }
     const controlPhoto = request.method === 'GET' && /^\/api\/(photos|thumbnail)\/([^/?]+)$/.exec(path);
