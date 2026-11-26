@@ -27,11 +27,12 @@ test('LAN peers can read the gallery without gaining access to controls', async 
   const network = new BlockList();
   network.addSubnet('127.0.0.1', 32, 'ipv4');
   const origin = 'http://camera.example.test';
-  const server = await createViewer({ origin, directory, camera, mode: 'lan', lanNetwork: network });
+  const server = await createViewer({ origin, directory, camera, mode: 'lan', lanNetwork: network, lanAddress: '127.0.0.1' });
   t.after(() => server.close());
   const port = await listen(server);
   const session = await call(port, '/session');
   assert.equal(session.data.role, 'viewer');
+  assert.equal((await call(port, '/session', { host: '127.0.0.1' })).data.role, 'viewer');
   assert.equal(session.headers['set-cookie'], undefined);
   assert.deepEqual((await call(port, '/photos')).data, [{ name: 'bird.jpg' }]);
   const photo = await call(port, '/photo/bird.jpg');

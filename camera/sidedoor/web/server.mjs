@@ -123,7 +123,7 @@ export async function initializeFamily(directory, password) {
   });
 }
 
-export async function createViewer({ origin, directory, mode = 'admin', inviteOrigin = origin, camera, lanNetwork }) {
+export async function createViewer({ origin, directory, mode = 'admin', inviteOrigin = origin, camera, lanNetwork, lanAddress }) {
   const lan = mode === 'lan';
   const guest = mode === 'guest' || lan;
   const shared = mode === 'shared';
@@ -131,6 +131,12 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
   if (publicUrl.protocol !== (lan ? 'http:' : 'https:') || publicUrl.origin !== origin ||
       !camera || (lan && !lanNetwork))
     throw new Error('Invalid viewer configuration');
+  const allowedHosts = new Set([publicUrl.host]);
+  if (lan && isIPv4(lanAddress)) {
+    const ipUrl = new URL(origin);
+    ipUrl.hostname = lanAddress;
+    allowedHosts.add(ipUrl.host);
+  }
 
   const store = accessStore(directory);
   const state = await store.read();
@@ -274,7 +280,7 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
     if (!lan) response.setHeader('Strict-Transport-Security', 'max-age=31536000');
     response.setHeader('Content-Security-Policy',
       "default-src 'self'; img-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'");
-    if (request.headers.host !== publicUrl.host) return send(response, 403, { error: 'Forbidden.' });
+    if (!allowedHosts.has(request.headers.host)) return send(response, 403, { error: 'Forbidden.' });
     if (lan && (!request.socket.remoteAddress || request.socket.remoteFamily !== 'IPv4' ||
         !lanNetwork.check(request.socket.remoteAddress, 'ipv4') ||
         request.headers['sec-fetch-site'] === 'cross-site' ||
@@ -418,7 +424,7 @@ async function startLanViewer(options, origin, cidr) {
       throw new Error('Set LAN_VIEWER_CIDR to the Wi-Fi interface IPv4 address and prefix from ip -4 addr.');
     const lanNetwork = new BlockList();
     lanNetwork.addSubnet(address, Number(prefix), 'ipv4');
-    const lan = await createViewer({ ...options, origin, mode: 'lan', lanNetwork });
+    const lan = await createViewer({ ...options, origin, mode: 'lan', lanNetwork, lanAddress: address });
     const listen = () => lan.listen(Number(new URL(origin).port || 80), address);
     lan.on('error', (error) => {
       console.error('LAN viewer:', error.code);

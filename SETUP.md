@@ -174,7 +174,7 @@ LAN_VIEWER_CIDR=192.168.4.111/22
 LAN_VIEWER_ORIGIN=http://192.168.4.111:8767
 ```
 
-Restart the viewer service, then open the exact configured URL from the same IPv4 subnet.
+Restart the viewer service, then open the configured URL from the same IPv4 subnet. For a friendly name, publish a local DNS or mDNS record such as `livecamera.local` for the Pi's reserved address and set `LAN_VIEWER_ORIGIN=http://livecamera.local:8767`. The listener also accepts its own IPv4 address at the same port.
 
 Anyone on that subnet can see the live preview and saved photos. The local listener carries media over HTTP. Keep this port off public tunnels, reverse proxies and router port forwards. Wi-Fi client isolation can block access even on the same network. Reserve the Pi's IP in DHCP. If it changes, update the configuration and restart the viewer. The public HTTPS viewer keeps its existing sign-in rules.
 
