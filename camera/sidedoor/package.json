@@ -10,8 +10,8 @@
     "build": "esbuild qr.js --bundle --format=esm --minify --outfile=web/admin-qr.js && esbuild passkey.js --bundle --format=esm --minify --outfile=web/passkey-client.js"
   },
   "dependencies": {
-    "thesidedoor-core": "0.5.10",
-    "thesidedoor-flock": "0.5.10"
+    "thesidedoor-core": "0.6.0",
+    "thesidedoor-flock": "0.6.0"
   },
   "devDependencies": {
     "esbuild": "0.28.2",
@@ -19,6 +19,6 @@
     "globals": "17.14.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "thesidedoor": "0.5.10"
+    "thesidedoor": "0.6.0"
   }
 }
