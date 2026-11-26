@@ -132,8 +132,8 @@ test('serves admins and read-only invitees on the same hostname', { timeout: 800
   assert.equal(ownerPasskey.data.options.authenticatorSelection.userVerification, 'required');
   assert.equal((await get('/session', owner.cookie)).data.role, 'admin');
   assert.equal((await get('/ai', owner.cookie)).status, 200);
-  assert.equal((await post('/access/login', { password: familyPassword })).status, 401);
-  const family = await signInForMonth('/access/family-login', familyPassword);
+  assert.equal((await post('/access/login', { password: 'incorrect-camera-password' })).status, 401);
+  const family = await signInForMonth('/access/login', familyPassword);
   const familyPasskey = await post('/access/register-options', {}, family.cookie);
   assert.equal(familyPasskey.data.options.user.name, 'Camera family');
   assert.notEqual(familyPasskey.data.options.user.id, ownerPasskey.data.options.user.id);
@@ -193,7 +193,9 @@ test('limits concurrent streams and lets only the admin disconnect active viewer
   const post = (target, path, body, cookie, site) => call(target, path, { method: 'POST', body, cookie, site });
   const owner = await post(adminPort, '/access/login', { password });
   assert.equal((await call(port, '/stream')).status, 401);
-  const family = await post(port, '/access/family-login', { password: familyPassword });
+  assert.equal((await post(port, '/access/login', { password })).status, 401);
+  assert.equal((await post(adminPort, '/access/login', { password: familyPassword })).status, 401);
+  const family = await post(port, '/access/login', { password: familyPassword });
   const invitation = await post(adminPort, '/access/issue-invitation', {}, owner.cookie);
   const invited = await post(port, '/access/redeem-invitation', { code: invitation.data.code });
   const spare = await post(adminPort, '/access/issue-invitation', {}, owner.cookie);
@@ -233,7 +235,7 @@ test('limits concurrent streams and lets only the admin disconnect active viewer
   assert.equal((await call(adminPort, '/session', { cookie: owner.cookie })).data.role, 'admin');
   assert.deepEqual((await post(adminPort, disconnect, {}, owner.cookie)).data, { disconnected: 0 });
   assert.equal((await post(port, '/access/redeem-invitation', { code: spare.data.code })).status, 200);
-  assert.equal((await post(port, '/access/family-login', { password: familyPassword })).status, 200);
+  assert.equal((await post(port, '/access/login', { password: familyPassword })).status, 200);
 });
 
 test('keeps viewer invitations read-only and admin AI credentials private', { timeout: 8000 }, async (t) => {

@@ -17,10 +17,9 @@
       </div>
     </header>
     <form id="unlock" hidden>
-      <label for="password" id="password-label">Admin password</label>
+      <label for="password">Camera password</label>
       <input id="password" name="password" type="password" autocomplete="current-password" maxlength="256" required>
-      <button type="submit" id="login-admin" title="Sign in to use camera controls and manage access">Open as admin</button>
-      <button type="submit" id="login-family" title="Sign in to view the live camera and saved photos" hidden>Open as family</button>
+      <button type="submit" id="password-submit" title="Sign in with your camera password">Sign in</button>
       <button type="button" id="login-passkey" title="Use a saved passkey to sign in" hidden>Sign in with a passkey</button>
     </form>
     <section id="passkey-offer" aria-labelledby="passkey-offer-title" hidden>

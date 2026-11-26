@@ -21,15 +21,11 @@ const photoProgress = byId('photo-progress');
 const familyLogin = document.body.hasAttribute('data-family');
 const guestPage = document.body.hasAttribute('data-guest');
 const lanPage = document.body.hasAttribute('data-lan');
-const adminButton = byId('login-admin');
-const familyButton = byId('login-family');
+const passwordSubmit = byId('password-submit');
 const passkeyButton = byId('login-passkey');
 const passkeyOffer = byId('passkey-offer');
 const canUsePasskeys = Boolean(window.PublicKeyCredential && navigator.credentials);
-adminButton.hidden = guestPage;
-familyButton.hidden = !familyLogin;
 passkeyButton.hidden = !canUsePasskeys || (guestPage && !familyLogin);
-if (familyLogin) byId('password-label').textContent = 'Camera password';
 let generation = 0;
 let previewGeneration = 0;
 let galleryRequest = 0;
@@ -383,10 +379,9 @@ async function loadPhotos() {
 unlock.addEventListener('submit', async (event) => {
   event.preventDefault();
   const password = byId('password');
-  const family = event.submitter === familyButton || guestPage;
-  adminButton.disabled = familyButton.disabled = passkeyButton.disabled = true;
+  passwordSubmit.disabled = passkeyButton.disabled = true;
   try {
-    await post(family ? '/access/family-login' : '/access/login', { password: password.value });
+    await post('/access/login', { password: password.value });
     unlock.reset();
     if (canUsePasskeys) {
       unlock.hidden = true;
@@ -395,15 +390,15 @@ unlock.addEventListener('submit', async (event) => {
       byId('save-passkey').focus();
     } else await enter();
   } catch (error) {
-    status.textContent = error.status === 401 ? (family ? 'Check the family password.' : 'Check the admin password.') :
+    status.textContent = error.status === 401 ? 'Check your camera password.' :
       error.status === 429 ? 'Too many attempts. Try again later.' : 'Could not open the viewer.';
   } finally {
-    adminButton.disabled = familyButton.disabled = passkeyButton.disabled = false;
+    passwordSubmit.disabled = passkeyButton.disabled = false;
   }
 });
 
 passkeyButton.addEventListener('click', async () => {
-  adminButton.disabled = familyButton.disabled = passkeyButton.disabled = true;
+  passwordSubmit.disabled = passkeyButton.disabled = true;
   status.textContent = '';
   try {
     const { passkeys } = await import('/passkey-client.js');
@@ -413,7 +408,7 @@ passkeyButton.addEventListener('click', async () => {
   } catch {
     status.textContent = 'Could not sign in with a passkey. Try again or use your password.';
   } finally {
-    adminButton.disabled = familyButton.disabled = passkeyButton.disabled = false;
+    passwordSubmit.disabled = passkeyButton.disabled = false;
   }
 });
 

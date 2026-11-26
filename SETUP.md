@@ -163,7 +163,7 @@ Choose **Sleep preview** to stop streaming in this tab immediately. It stays asl
 
 The rear LCD is controlled on the camera. Enable **Monitor Off** under **Camera Settings2 → DISP Button → Monitor**, then use the camera's DISP button to switch display modes. The α7 III can suspend automatic power save while connected to a computer. [Sony finder and monitor settings](https://helpguide.sony.net/ilc/1720/v1/en/contents/TP0001629732.html) · [Sony power-save guide](https://helpguide.sony.net/ilc/1720/v1/en/contents/TP0001653176.html)
 
-To add a reusable family password, run the viewer's `setup-family` command with the same state directory as the admin setup and supply a separate password on stdin. Restart the viewer afterward. **Open as family** gives access to the live preview and gallery.
+To add a reusable family password, run the viewer's `setup-family` command with the same state directory as the admin setup and supply a separate password on stdin. Restart the viewer afterward. On the shared hostname, enter either password and select **Sign in**. The family password opens the live preview and gallery.
 
 New admin and family sign-ins stay signed in on the same browser for 30 days. Signing out ends the session immediately. The cookie contains a session token.
 

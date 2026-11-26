@@ -33,8 +33,8 @@ const ownerAccess = new Set(['issue-invitation', 'revoke-invitation', 'invitatio
   'sessions', 'revoke-session', 'viewer-sessions', 'disconnect-viewers', 'reauthenticate', 'change-password']);
 const passkeyLogin = new Set(['authentication-options', 'authenticate-passkey']);
 const passkeyEnrollment = new Set(['register-options', 'register-passkey']);
-const guestAccessPosts = new Set(['redeem-invitation', 'family-login', 'logout', ...passkeyLogin, ...passkeyEnrollment]);
-const accessPosts = new Set(['login', 'family-login', 'logout', 'redeem-invitation', 'issue-invitation',
+const guestAccessPosts = new Set(['redeem-invitation', 'login', 'logout', ...passkeyLogin, ...passkeyEnrollment]);
+const accessPosts = new Set(['login', 'logout', 'redeem-invitation', 'issue-invitation',
   'revoke-invitation', 'revoke-session', 'disconnect-viewers', 'reauthenticate', 'change-password']);
 const cameraRoutes = new Map([
   ['GET /photos', '/api/photos?details=1'],
@@ -145,7 +145,18 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
   if (state.mode !== 'household' || state.householdPasswordHash ||
       !state.principals.some(({ role, name }) => role === 'owner' && name === ownerName))
     throw new Error('Initialize the camera admin before starting the viewer');
-  const access = new AccessService({
+  class CameraAccess extends AccessService {
+    async login(name, password, deviceName) {
+      if (shared && familyEnabled) {
+        const owner = (await store.read()).principals.find(({ name, role }) => name === ownerName && role === 'owner');
+        // Sidedoor rate-limits the request before calling login and rechecks the
+        // selected principal before issuing a session.
+        if (owner?.passwordHash && !await verifyPassword(password, owner.passwordHash)) name = familyName;
+      }
+      return super.login(name, password, deviceName);
+    }
+  }
+  const access = new CameraAccess({
     store, sessionTtlMs, householdSessionTtlMs: sessionTtlMs,
     allowPrincipalAccessInHousehold: true, allowHouseholdInvitations: true,
   });
@@ -207,11 +218,10 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
     const loginWithPasskey = passkeyLogin.has(action);
     const enrollPasskey = passkeyEnrollment.has(action);
     const passkeyAction = loginWithPasskey || enrollPasskey;
-    if (passkeyAction && guest && !familyEnabled)
+    if (guest && !familyEnabled && (passkeyAction || action === 'login'))
       return send(response, 404, { error: 'Not found.' });
-    const viewerAction = action === 'redeem-invitation' || action === 'family-login';
-    if ((!passkeyAction && !shared && guest !== viewerAction && action !== 'logout') ||
-        (action === 'family-login' && !familyEnabled))
+    if (!passkeyAction && !shared && action !== 'login' && action !== 'logout' &&
+        guest !== (action === 'redeem-invitation'))
       return send(response, 404, { error: 'Not found.' });
     if (!(request.method === 'GET' && ['invitations', 'sessions', 'viewer-sessions'].includes(action)) &&
         !(request.method === 'POST' && (accessPosts.has(action) || passkeyAction)))
@@ -222,8 +232,7 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
     let body;
     if (request.method === 'POST') {
       body = await readJson(request, passkeyAction ? 64_000 : 8192);
-      if (action === 'login') body = { name: ownerName, password: body.password };
-      if (action === 'family-login') body = { name: familyName, password: body.password };
+      if (action === 'login') body = { name: guest ? familyName : ownerName, password: body.password };
       if (action === 'issue-invitation') body = { uses: 1 };
       if (action === 'redeem-invitation') body = { code: body.code };
     }
@@ -238,7 +247,7 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
       });
       return send(response, 200, { disconnected });
     }
-    const check = ['login', 'family-login', 'reauthenticate', 'change-password'].includes(action);
+    const check = ['login', 'reauthenticate', 'change-password'].includes(action);
     if (check && checkingPassword) return send(response, 429, { error: 'Try again shortly.' });
     if (check) checkingPassword = true;
     try {
@@ -247,7 +256,7 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
         if (family?.passwordHash && await verifyPassword(body.password, family.passwordHash))
           return send(response, 400, { error: 'Choose a password different from the family password.' });
       }
-      const result = await sidedoor(browserRequest(request, body), action === 'family-login' ? 'login' : action);
+      const result = await sidedoor(browserRequest(request, body), action);
       if (action === 'authenticate-passkey' && result.ok) {
         const { principal } = await result.clone().json();
         const allowed = principal?.role === 'owner' && !guest ||
