@@ -118,18 +118,78 @@ activity.addEventListener('toggle', updateActivity);
 menu.addEventListener('toggle', updateActivity);
 document.addEventListener('visibilitychange', updateActivity);
 
+const aiProvider = byId('ai-provider');
+const aiModel = byId('ai-model');
+const aiCustom = byId('ai-custom-model');
+const aiKey = byId('ai-key');
+const aiStatus = byId('ai-status');
+const saveAi = byId('save-ai');
+const checkAi = byId('check-ai');
+let savedAi;
+let testedAi;
+let aiBusy = false;
+
+function aiDraft() {
+  return {
+    enabled: byId('ai-enabled').checked,
+    requireAdvice: byId('ai-required').checked,
+    provider: aiProvider.value,
+    model: aiModel.value === 'custom' ? aiCustom.value.trim() : aiModel.value,
+    prompt: byId('ai-prompt').value,
+    apiKey: aiKey.value,
+  };
+}
+
+function aiFingerprint({ provider, model, apiKey }) {
+  return JSON.stringify([provider, model, apiKey.trim()]);
+}
+
+function refreshAiActions() {
+  const draft = aiDraft();
+  const disabled = savedAi && !draft.enabled && !draft.apiKey && draft.provider === savedAi.provider &&
+    draft.model === savedAi.model;
+  checkAi.disabled = aiBusy || !draft.provider || !draft.model;
+  saveAi.disabled = aiBusy || (!disabled && testedAi !== aiFingerprint(draft));
+}
+
+function renderAiModels(selected = '') {
+  const provider = savedAi.providers.find(({ id }) => id === aiProvider.value);
+  const models = provider?.models ?? [];
+  aiModel.replaceChildren(new Option('Choose model', ''),
+    ...models.map(({ id, label }) => new Option(label, id)));
+  if (provider) aiModel.add(new Option('Enter model ID', 'custom'));
+  aiModel.value = models.some(({ id }) => id === selected) ? selected : selected ? 'custom' : '';
+  aiCustom.value = aiModel.value === 'custom' ? selected : '';
+  aiKey.value = '';
+  aiKey.hidden = byId('ai-key-label').hidden = provider?.transport !== 'api';
+  aiKey.placeholder = provider?.hasKey ? 'Saved. Enter a new key to replace it.' : '';
+  byId('ai-cli-help').hidden = provider?.transport !== 'cli';
+  updateAiModelField();
+}
+
+function updateAiModelField() {
+  aiCustom.hidden = byId('ai-custom-model-label').hidden = aiModel.value !== 'custom';
+  refreshAiActions();
+}
+
 function renderAi(data) {
+  savedAi = data;
+  testedAi = undefined;
   byId('ai-enabled').checked = data.enabled;
   byId('ai-required').checked = data.requireAdvice;
-  byId('ai-provider').replaceChildren(new Option('Choose provider', ''),
-    ...data.providers.map(({ id, label }) => new Option(label ?? id, id)));
-  byId('ai-provider').value = data.provider;
-  byId('ai-model').value = data.model;
+  aiProvider.replaceChildren(new Option('Choose provider', ''),
+    ...data.providers.map(({ id, label }) => new Option(label, id)));
+  aiProvider.value = data.provider;
   byId('ai-prompt').value = data.prompt;
-  const key = byId('ai-key');
-  key.value = '';
-  key.placeholder = data.hasKey ? 'Saved. Enter a new key to replace it.' : '';
+  renderAiModels(data.model);
 }
+
+aiProvider.onchange = () => renderAiModels();
+aiModel.onchange = updateAiModelField;
+ai.oninput = () => {
+  aiStatus.textContent = '';
+  refreshAiActions();
+};
 
 byId('preview-settings').onsubmit = (event) => {
   event.preventDefault();
@@ -166,16 +226,29 @@ disconnectViewers.onclick = () => act(async (current) => {
     disconnectViewers.disabled = false;
   }
 }, sessionStatus);
-byId('check-ai').onclick = () => act(async (current) => {
-  const result = await post('/ai/check');
-  if (generation !== current) return;
-  status.textContent = {
-    valid: 'The provider verified the saved API key.',
-    rejected: 'The provider rejected the saved API key.',
-    missing: 'Save a provider and API key first.',
-    inconclusive: 'The provider could not verify the saved API key.',
-  }[result.status];
-});
+checkAi.onclick = () => act(async (current) => {
+  const draft = aiDraft();
+  const fingerprint = aiFingerprint(draft);
+  aiBusy = true;
+  testedAi = undefined;
+  refreshAiActions();
+  try {
+    aiStatus.textContent = 'Testing the selected model…';
+    const result = await post('/ai/check', draft);
+    if (generation !== current || fingerprint !== aiFingerprint(aiDraft())) return;
+    if (result.status === 'valid') testedAi = fingerprint;
+    aiStatus.textContent = {
+      valid: 'Model test passed. You can now save.',
+      missing: 'Choose a model and enter an API key if required.',
+      busy: 'A model test is already running.',
+      not_installed: 'This CLI is not installed on the Pi.',
+      failed: 'Model test failed. Check the model and API key or CLI login.',
+    }[result.status];
+  } finally {
+    aiBusy = false;
+    refreshAiActions();
+  }
+}, aiStatus);
 byId('issue').onsubmit = (event) => {
   event.preventDefault();
   void act(async (current) => {
@@ -194,22 +267,20 @@ byId('issue').onsubmit = (event) => {
 };
 ai.onsubmit = (event) => {
   event.preventDefault();
+  if (saveAi.disabled) return;
   void act(async (current) => {
-    const key = byId('ai-key');
-    const apiKey = key.value;
-    key.value = '';
-    const result = await post('/ai', {
-      enabled: byId('ai-enabled').checked,
-      requireAdvice: byId('ai-required').checked,
-      provider: byId('ai-provider').value,
-      model: byId('ai-model').value,
-      prompt: byId('ai-prompt').value,
-      apiKey,
-    });
-    if (generation !== current) return;
-    renderAi(result);
-    status.textContent = 'AI settings saved.';
-  });
+    aiBusy = true;
+    refreshAiActions();
+    try {
+      const result = await post('/ai', aiDraft());
+      if (generation !== current) return;
+      renderAi(result);
+      aiStatus.textContent = 'AI settings saved.';
+    } finally {
+      aiBusy = false;
+      refreshAiActions();
+    }
+  }, aiStatus);
 };
 
 menu.addEventListener('toggle', () => {
@@ -226,5 +297,8 @@ menu.addEventListener('toggle', () => {
   clearQr(byId('admin-qr'));
   clearQr(byId('invite-qr'));
   byId('confirm-password').value = '';
-  byId('ai-key').value = '';
+  aiKey.value = '';
+  testedAi = undefined;
+  aiStatus.textContent = '';
+  refreshAiActions();
 });

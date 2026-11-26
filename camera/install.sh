@@ -87,7 +87,8 @@ install -m 644 "$project_dir/camera.py" "$project_dir/camera.html" \
 install -d -m 755 /opt/pi-camera/sidedoor/web
 getent group sony-camera-viewer >/dev/null || groupadd --system sony-camera-viewer
 install -m 644 "$project_dir/sidedoor/advice.mjs" \
-  "$project_dir/sidedoor/ai-config.mjs" "$project_dir/sidedoor/package.json" \
+  "$project_dir/sidedoor/ai-cli.mjs" "$project_dir/sidedoor/ai-config.mjs" \
+  "$project_dir/sidedoor/package.json" \
   "$project_dir/sidedoor/package-lock.json" /opt/pi-camera/sidedoor/
 install -m 644 "$project_dir/sidedoor/web/"* /opt/pi-camera/sidedoor/web/
 install -m 644 "$project_dir/sony-pi-camera@.service" /etc/systemd/system/

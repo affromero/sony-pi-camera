@@ -424,15 +424,14 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
     }
     if (route === 'POST /ai/check') {
       await authenticate(request, true);
-      await readJson(request);
-      const result = await ai.check();
+      const result = await ai.test(await readJson(request, 8192));
       return send(response, 200, result);
     }
     if (route === 'GET /ai' || route === 'POST /ai') {
       await authenticate(request, true);
       if (request.method === 'GET') return send(response, 200, await ai.read());
-      const result = await ai.update(await readJson(request));
-      return send(response, result ? 200 : 400, result ?? { error: 'Choose a provider, model, goal, and API key.' });
+      const result = await ai.update(await readJson(request, 8192));
+      return send(response, result ? 200 : 400, result ?? { error: 'Choose a provider, model and photo goal, then pass the model test before saving.' });
     }
     if (cameraRoutes.has(route)) {
       await authenticate(request, route !== 'GET /photos');

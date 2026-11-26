@@ -216,7 +216,9 @@ The timer skips missed times while the Pi is off. If another camera command is r
 
 The timer can send one JPEG preview and the camera's current exposure and white balance settings to a vision model through Sidedoor. Give it a goal such as “Keep moving subjects sharp and lift dark shadows.” The job logs an assessment and any suggested values the camera reports as writable. Suggestions appear in the systemd journal, and the shutter uses the camera's current settings. Camera controls are available again while the model runs, so a manual change can affect the subsequent shot.
 
-Sign in as admin and open **AI advice for scheduled captures**. Choose an API provider, enter a vision model with structured output, add its API key and describe the photo you want. Select **Analyze a preview before each scheduled shot** and save. Sidedoor encrypts the API key on the Pi. A blank key field keeps the selected provider's saved credential. **Check saved API key** contacts that provider without sending a camera preview.
+Sign in as admin and open **AI advice for scheduled captures**. Choose an API or CLI provider, select a vision model and describe the photo you want. An API provider uses a saved or newly entered key. A CLI provider uses the login on the Pi. Install its CLI on the Pi, make it available to both camera services, and authenticate as the camera service user before running the test.
+
+Select **Test model** to check that the draft provider, credential and model can return advice for a sample image. The test leaves the camera and saved settings alone. After it passes, select **Analyze a preview before each scheduled shot** and save. Changing the provider, model or key requires another test. Sidedoor encrypts saved API keys on the Pi.
 
 If advice fails, the timer logs the error and takes the photo. Select **Require AI advice before capture** to skip the shot when advice fails.
 

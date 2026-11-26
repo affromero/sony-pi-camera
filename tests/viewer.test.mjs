@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { createServer, request } from 'node:http';
 import { BlockList } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -409,10 +409,9 @@ test('keeps viewer invitations read-only and admin AI credentials private', { ti
   const configured = await post('/ai', {
     enabled: true, provider: 'openai', model: 'vision-model', prompt: 'Lift shadows', apiKey: 'example-test-credential',
   }, owner.cookie);
-  assert.equal(configured.status, 200);
-  assert.equal((await get('/ai', owner.cookie)).data.hasKey, true);
+  assert.equal(configured.status, 400);
+  assert.equal((await get('/ai', owner.cookie)).data.hasKey, false);
   assert.ok(!JSON.stringify(configured.data).includes('example-test-credential'));
-  assert.ok(!(await readFile(join(directory, 'ai.json'), 'utf8')).includes('example-test-credential'));
   assert.equal((await post('/setting', { name: 'iso', value: '400' }, owner.cookie)).status, 200);
   assert.equal((await get('/settings', owner.cookie)).data.iso, '400');
   assert.equal((await post('/delete', { name: 'nonempty/a %.raw' }, owner.cookie)).status, 200);

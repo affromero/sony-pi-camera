@@ -48,13 +48,17 @@
             <label for="ai-provider">Provider</label>
             <select id="ai-provider"><option value="">Choose provider</option></select>
             <label for="ai-model">Vision model</label>
-            <input id="ai-model" type="text" maxlength="120">
-            <label for="ai-key">Provider API key</label>
-            <input id="ai-key" type="password" maxlength="4096" autocomplete="off">
+            <select id="ai-model"></select>
+            <label id="ai-custom-model-label" for="ai-custom-model" hidden>Model ID</label>
+            <input id="ai-custom-model" type="text" maxlength="120" hidden>
+            <label id="ai-key-label" for="ai-key" hidden>Provider API key</label>
+            <input id="ai-key" type="password" maxlength="4096" autocomplete="off" hidden>
+            <p id="ai-cli-help" hidden>Uses the CLI login on the Pi. Install and sign in to the CLI on the Pi first.</p>
             <label for="ai-prompt">Photo goal</label>
             <textarea id="ai-prompt" maxlength="2000" rows="4"></textarea>
-            <button type="submit" title="Save the provider, model and photo goal">Save AI settings</button>
-            <button id="check-ai" type="button" title="Check whether the provider accepts the saved credential">Check saved API key</button>
+            <button id="check-ai" type="button" title="Test the selected model on a sample image">Test model</button>
+            <button id="save-ai" type="submit" title="Save the tested model and photo goal" disabled>Save AI settings</button>
+            <p id="ai-status" role="status"></p>
           </form>
         </details>
         <p id="admin-status" role="status"></p>
