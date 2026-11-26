@@ -269,6 +269,7 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
   async function handle(request, response) {
     response.setHeader('Cache-Control', 'private, no-store');
     response.setHeader('X-Content-Type-Options', 'nosniff');
+    if (lan) response.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
     response.setHeader('Referrer-Policy', 'no-referrer');
     if (!lan) response.setHeader('Strict-Transport-Security', 'max-age=31536000');
     response.setHeader('Content-Security-Policy',
@@ -410,11 +411,12 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
   return server;
 }
 
-async function startLanViewer(options, origin, interfaceName) {
+async function startLanViewer(options, origin, interfaceName, waiting = false) {
   const network = networkInterfaces()[interfaceName]
     ?.find(({ family, internal, cidr }) => family === 'IPv4' && !internal && cidr);
   if (!network) {
-    setTimeout(() => void startLanViewer(options, origin, interfaceName), 10000);
+    if (!waiting) console.error('LAN viewer: waiting for IPv4 on', interfaceName);
+    setTimeout(() => void startLanViewer(options, origin, interfaceName, true), 10000);
     return;
   }
   try {

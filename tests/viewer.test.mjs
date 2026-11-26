@@ -16,7 +16,14 @@ test('LAN peers can read the gallery without gaining access to controls', async 
   const directory = await mkdtemp(join(tmpdir(), 'sony-camera-lan-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   await initializeAdmin(directory, password);
-  const camera = { async json() { return { status: 200, data: [{ name: 'bird.jpg' }] }; } };
+  const camera = {
+    async json() { return { status: 200, data: [{ name: 'bird.jpg' }] }; },
+    async download(name, response, inline) {
+      if (name !== 'bird.jpg' || !inline) return 404;
+      response.writeHead(200, { 'Content-Type': 'image/jpeg' }).end('mock jpeg');
+      return 200;
+    },
+  };
   const network = new BlockList();
   network.addSubnet('127.0.0.1', 32, 'ipv4');
   const origin = 'http://camera.example.test';
@@ -27,14 +34,16 @@ test('LAN peers can read the gallery without gaining access to controls', async 
   assert.equal(session.data.role, 'viewer');
   assert.equal(session.headers['set-cookie'], undefined);
   assert.deepEqual((await call(port, '/photos')).data, [{ name: 'bird.jpg' }]);
+  const photo = await call(port, '/photo/bird.jpg');
+  assert.equal(photo.status, 200);
+  assert.equal(photo.data.toString(), 'mock jpeg');
+  assert.equal(photo.headers['cross-origin-resource-policy'], 'same-origin');
   assert.equal((await call(port, '/controls')).status, 404);
   assert.equal((await call(port, '/access/login', { method: 'POST', body: { password }, site: origin })).status, 404);
   assert.equal((await call(port, '/session', { host: 'wrong.example.test' })).status, 403);
   const excluded = await createViewer({ origin, directory, camera, mode: 'lan', lanNetwork: new BlockList() });
   t.after(() => excluded.close());
-  assert.equal((await call(await listen(excluded), '/photos', {
-    extraHeaders: { 'X-Forwarded-For': '127.0.0.1' },
-  })).status, 403);
+  assert.equal((await call(await listen(excluded), '/photos')).status, 403);
   assert.equal((await call(port, '/stream', {
     extraHeaders: { 'Sec-Fetch-Site': 'cross-site' },
   })).status, 403);

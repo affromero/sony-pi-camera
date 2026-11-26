@@ -41,6 +41,7 @@ Scheduled captures run on the Pi even when the separate compute machine is offli
 flowchart LR
     Family -->|Public HTTPS| Relay[Viewer relay]
     Relay -->|Guest Unix socket| Camera[Private camera service]
+    WiFi[Wi-Fi viewers] -->|Optional local HTTP| Camera
     Owner -->|LAN or VPN HTTPS| Admin[Admin]
     Admin --> Camera
     Compute[Computer vision worker] -->|SSH tunnel| Camera

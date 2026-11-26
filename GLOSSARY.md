@@ -11,6 +11,7 @@
 | Flexible Spot | A Sony focus area you can position within the frame. Tap-to-focus moves the spot and asks the camera to autofocus. [Sony help guide](https://helpguide.sony.net/ilc/1720/v1/en/contents/TP0001653124.html) |
 | Focus magnifier | Drag a box to enlarge part of the live view. The orange rectangle marks the camera's current viewport. Pressing the dashboard shutter saves that region as a cropped JPEG on the Pi. [Sony help guide](https://helpguide.sony.net/ilc/1720/v1/en/contents/TP0001629665.html) |
 | libgphoto2 | The USB camera library used by the Rust backend for settings, focus, preview and capture. [Project source](https://github.com/gphoto/libgphoto2) |
+| Local Wi-Fi viewer | An optional read-only preview and gallery for devices on the Pi's Wi-Fi subnet. [Local viewer setup](SETUP.md#password-free-viewer-on-local-wi-fi) |
 | PC Remote | Sony's USB mode for tethered shooting. On the tested α7 III, it provides capture and control while existing card folders are unavailable to the Pi. [Sony help guide](https://helpguide.sony.net/ilc/1720/v1/en/contents/TP0001629775.html) |
 | Pi photo library | The files under `~/camera-photos`. The gallery shows copies captured or transferred to the Pi. |
 | SSH tunnel | A port forward that lets a browser reach the Pi's loopback camera service through an authenticated SSH connection. [Dashboard setup](SETUP.md#open-the-dashboard) |
