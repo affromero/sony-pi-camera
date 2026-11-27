@@ -513,34 +513,47 @@ function syncPhotos() { if (connected() && !document.hidden) photos(); }
 setInterval(syncPhotos, 5000);
 document.addEventListener('visibilitychange', syncPhotos);
 function start() { syncVisibleSettings(); syncPhotos(); }
-function addScheduleTime(value = '') {
-  const row = document.createElement('div');
-  const label = document.createElement('label');
-  label.textContent = 'Daily time ';
-  const input = document.createElement('input');
-  input.type = 'time';
-  input.value = value;
-  label.append(input);
+function scheduleRow(time) {
+  const row = document.createElement('li');
+  const label = document.createElement('time');
+  label.dateTime = label.textContent = time;
+  const edit = document.createElement('button');
+  edit.type = 'button';
+  edit.className = 'secondary';
+  edit.textContent = 'Edit';
+  edit.setAttribute('aria-label', 'Edit ' + time);
+  edit.onclick = () => {
+    editingTime = time;
+    $('schedule-time-label').textContent = 'Edit capture time';
+    $('schedule-time').value = time;
+    $('schedule-time').focus();
+  };
   const remove = document.createElement('button');
   remove.type = 'button';
-  remove.title = 'Remove this time from the capture schedule';
-  remove.className = 'secondary';
-  remove.textContent = 'Remove';
+  remove.className = 'secondary schedule-remove';
+  remove.textContent = '×';
+  remove.title = 'Delete ' + time;
+  remove.setAttribute('aria-label', 'Delete ' + time);
   remove.onclick = () => {
-    row.remove();
-    if (!$('schedule-times').childElementCount) $('schedule-enabled').checked = false;
-    scheduleEdited();
+    const times = savedSchedule.times.filter(value => value !== time);
+    const consequence = times.length ? '' : ' This turns off daily captures.';
+    const discard = scheduleDirty ? ' Unsaved changes will be discarded.' : '';
+    if (!confirm('Delete the ' + time + ' capture time?' + consequence + discard)) return;
+    const { enabled, timezone } = savedSchedule;
+    void saveSchedule({enabled: enabled && times.length > 0, times, timezone}, 'Deleting capture time…');
   };
-  row.append(label, remove);
-  $('schedule-times').append(row);
-  return input;
+  row.append(label, edit, remove);
+  return row;
 }
 function scheduleEdited() {
+  scheduleDirty = true;
   $('schedule-status').textContent = 'Unsaved changes';
 }
 let nextCaptureAt = null;
 let countdownTimer;
-let savedScheduleZone;
+let savedSchedule;
+let editingTime;
+let scheduleDirty = false;
 async function tickSchedule() {
   clearTimeout(countdownTimer);
   const countdown = $('schedule-next');
@@ -564,10 +577,13 @@ async function tickSchedule() {
   countdownTimer = setTimeout(tickSchedule, seconds > 0 ? 1000 : 5000);
 }
 function showSchedule(schedule) {
-  savedScheduleZone = schedule.timezone;
-  $('schedule-delete').hidden = !schedule.times.length;
-  $('schedule-times').replaceChildren();
-  schedule.times.forEach(value => addScheduleTime(value));
+  savedSchedule = schedule;
+  scheduleDirty = false;
+  editingTime = undefined;
+  $('schedule-time').value = '';
+  $('schedule-time-label').textContent = 'Add a time';
+  $('schedule-times').replaceChildren(...schedule.times.map(scheduleRow));
+  $('schedule-empty').hidden = schedule.times.length > 0;
   $('schedule-zone').value = (schedule.inheritsTimezone && localZone) || schedule.timezone;
   $('schedule-enabled').checked = schedule.enabled;
   $('schedule-status').textContent = schedule.enabled
@@ -602,7 +618,6 @@ $('capture-schedule').ontoggle = () => {
 document.addEventListener('visibilitychange', tickSchedule);
 $('schedule-retry').onclick = loadSchedule;
 $('schedule-form').oninput = scheduleEdited;
-$('schedule-add').onclick = () => { addScheduleTime().focus(); scheduleEdited(); };
 $('schedule-test').onclick = async () => {
   const button = $('schedule-test');
   button.disabled = true;
@@ -638,18 +653,15 @@ async function saveSchedule(schedule, message) {
     $('schedule-fields').disabled = false;
   }
 }
-$('schedule-delete').onclick = () => {
-  if (!scheduleLoaded || $('schedule-fields').disabled ||
-      !confirm('Delete all saved capture times and turn off daily captures?')) return;
-  void saveSchedule({enabled: false, times: [], timezone: savedScheduleZone}, 'Deleting schedule…');
-};
 $('schedule-form').onsubmit = event => {
   event.preventDefault();
   if (!scheduleLoaded || $('schedule-fields').disabled) return;
   const enabled = $('schedule-enabled').checked;
-  const times = Array.from($('schedule-times').querySelectorAll('input'), input => input.value);
-  if (times.includes('') || (enabled && !times.length)) {
-    $('schedule-status').textContent = 'Choose a time for each daily capture.';
+  const value = $('schedule-time').value;
+  const times = savedSchedule.times.filter(time => time !== editingTime);
+  if (value) times.push(value);
+  if ((editingTime && !value) || (enabled && !times.length)) {
+    $('schedule-status').textContent = 'Choose a capture time.';
     return;
   }
   if (new Set(times).size !== times.length) {

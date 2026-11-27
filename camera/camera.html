@@ -23,14 +23,21 @@
 <summary>Scheduled captures</summary>
 <form id="schedule-form"><fieldset id="schedule-fields" disabled>
 <label><input type="checkbox" id="schedule-enabled"> Enable daily captures</label>
-<div id="schedule-times"></div>
-<button class="secondary" type="button" id="schedule-add">Add time</button>
-<label>Time zone <input id="schedule-zone" list="schedule-zones" required placeholder="America/Chicago"></label>
+<div class="schedule-zone"><label for="schedule-zone">Time zone</label>
+<input id="schedule-zone" list="schedule-zones" required placeholder="America/Chicago">
+<button class="secondary" type="button" id="schedule-local-zone" hidden>Use my time zone</button></div>
 <datalist id="schedule-zones"></datalist>
-<button class="secondary" type="button" id="schedule-local-zone" hidden>Use my time zone</button>
+<div class="schedule-time"><label for="schedule-time" id="schedule-time-label">Add a time</label>
+<input id="schedule-time" type="time"></div>
+<div class="schedule-actions">
 <button class="secondary" type="submit" title="Apply the selected daily capture times and time zone">Save schedule</button>
-<button class="secondary" type="button" id="schedule-delete" title="Clear all saved capture times and turn off daily captures" hidden>Delete schedule</button>
 <button class="secondary" type="button" id="schedule-test" title="Run the scheduled capture job once with saved settings">Test now</button>
+</div>
+<section class="schedule-list" aria-labelledby="schedule-list-title">
+<h3 id="schedule-list-title">Saved capture times</h3>
+<ul id="schedule-times"></ul>
+<p id="schedule-empty">No saved times.</p>
+</section>
 </fieldset></form><p role="status" id="schedule-status"></p>
 <p id="schedule-next" hidden></p>
 <button class="secondary" id="schedule-retry" hidden>Retry loading schedule</button></details>

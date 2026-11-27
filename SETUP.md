@@ -157,7 +157,7 @@ After admin sign-in, the shared site opens the same camera controls used on the 
 
 Open the administration menu from the camera controls. Under **Viewer invitations**, choose **Disconnect signed-in viewers** to sign out family and invitation sessions and stop their live previews. Family members can sign in again with their password, and unused invitations still work.
 
-Under **Scheduled captures**, edit a time, use **Add time** to schedule up to 24 daily captures, or use **Remove** to delete an entry. Removing the last time turns daily captures off when you save. Choose **Use my time zone** to use the browser's time zone. When the schedule is enabled, the countdown shows the Pi timer's next run.
+Under **Scheduled captures**, add a time or select **Edit** beside a saved time, then select **Save schedule**. Select **×** next to a saved time and confirm to delete it. Deleting the last time turns daily captures off. Choose **Use my time zone** to use the browser's time zone. When the schedule is enabled, the countdown shows the Pi timer's next run.
 
 **Test now** queues one capture through the same job as the timer, using the saved AI settings. Check **Photos on the Pi** for the result. You can test while daily captures are off.
 
