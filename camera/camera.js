@@ -540,6 +540,7 @@ function scheduleEdited() {
 }
 let nextCaptureAt = null;
 let countdownTimer;
+let savedScheduleZone;
 async function tickSchedule() {
   clearTimeout(countdownTimer);
   const countdown = $('schedule-next');
@@ -563,6 +564,8 @@ async function tickSchedule() {
   countdownTimer = setTimeout(tickSchedule, seconds > 0 ? 1000 : 5000);
 }
 function showSchedule(schedule) {
+  savedScheduleZone = schedule.timezone;
+  $('schedule-delete').hidden = !schedule.times.length;
   $('schedule-times').replaceChildren();
   schedule.times.forEach(value => addScheduleTime(value));
   $('schedule-zone').value = (schedule.inheritsTimezone && localZone) || schedule.timezone;
@@ -623,7 +626,24 @@ if (localZone) {
   localZoneButton.title = 'Use ' + localZone + ' for daily capture times';
   localZoneButton.onclick = () => { $('schedule-zone').value = localZone; scheduleEdited(); };
 }
-$('schedule-form').onsubmit = async event => {
+async function saveSchedule(schedule, message) {
+  $('schedule-fields').disabled = true;
+  $('schedule-status').textContent = message;
+  try {
+    const response = await post('/api/schedule', schedule);
+    showSchedule(await response.json());
+  } catch (error) {
+    $('schedule-status').textContent = error.message;
+  } finally {
+    $('schedule-fields').disabled = false;
+  }
+}
+$('schedule-delete').onclick = () => {
+  if (!scheduleLoaded || $('schedule-fields').disabled ||
+      !confirm('Delete all saved capture times and turn off daily captures?')) return;
+  void saveSchedule({enabled: false, times: [], timezone: savedScheduleZone}, 'Deleting schedule…');
+};
+$('schedule-form').onsubmit = event => {
   event.preventDefault();
   if (!scheduleLoaded || $('schedule-fields').disabled) return;
   const enabled = $('schedule-enabled').checked;
@@ -636,16 +656,7 @@ $('schedule-form').onsubmit = async event => {
     $('schedule-status').textContent = 'Choose a different time for each capture.';
     return;
   }
-  $('schedule-fields').disabled = true;
-  $('schedule-status').textContent = 'Saving schedule…';
-  try {
-    const response = await post('/api/schedule', {enabled, times, timezone: $('schedule-zone').value.trim()});
-    showSchedule(await response.json());
-  } catch (error) {
-    $('schedule-status').textContent = error.message;
-  } finally {
-    $('schedule-fields').disabled = false;
-  }
+  void saveSchedule({enabled, times, timezone: $('schedule-zone').value.trim()}, 'Saving schedule…');
 };
 if (sidedoor) {
   $('admin-schedule-slot')?.replaceWith($('capture-schedule'));
