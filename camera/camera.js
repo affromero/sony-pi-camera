@@ -4,7 +4,6 @@ for (const [id, hint] of Object.entries({
   'mag-exit': 'Exit magnification and show the full camera frame',
   'mag-level': 'Current camera magnification',
   'capture-schedule': 'Choose when the camera takes photos automatically',
-  'schedule-add': 'Add another daily capture time',
   'schedule-retry': 'Try to load the saved schedule again',
   'photo-from': 'Show photos saved on or after this date',
   'photo-through': 'Show photos saved on or before this date',
