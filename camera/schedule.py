@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 TIME = r"(?:[01][0-9]|2[0-3]):[0-5][0-9]"
 MANAGED = "zz-sony-dashboard.conf"
 HEADER = "# Managed by Sony Pi Camera\n"
+EMPTY = "# Camera schedule cleared. Time zone: "
 UNIT_DIR = Path("/etc/systemd/system")
 
 
@@ -42,12 +43,13 @@ def validate(data: object) -> dict:
         raise ValueError("Enabled must be true or false.")
     if (
         not isinstance(times, list)
-        or not 1 <= len(times) <= 24
+        or len(times) > 24
+        or (data["enabled"] and not times)
         or not all(isinstance(t, str) and re.fullmatch(TIME, t) for t in times)
         or len(set(times)) != len(times)
     ):
         raise ValueError(
-            "Choose 1 to 24 distinct daily times in HH:MM format."
+            "Choose up to 24 distinct times, with at least one when enabled."
         )
     return dict(
         enabled=data["enabled"],
@@ -83,10 +85,13 @@ def pi_timezone() -> str:
 def daily_times(unit_text: str) -> tuple[list[str], str, bool]:
     section = ""
     calendar: list[str] = []
+    cleared_zone = None
     for line in unit_text.splitlines():
         line = line.strip()
         if line.startswith("["):
             section = line
+        if section == "[Timer]" and line.startswith(EMPTY):
+            cleared_zone = timezone(line.removeprefix(EMPTY))
         if section != "[Timer]" or line.startswith(("#", ";")):
             continue
         key, equals, value = line.partition("=")
@@ -112,6 +117,8 @@ def daily_times(unit_text: str) -> tuple[list[str], str, bool]:
         inherits_timezone = inherits_timezone and match[2] is None
     if len(zones) != 1:
         raise RuntimeError("Timer needs daily times in one timezone.")
+    if cleared_zone:
+        return [], cleared_zone, False
     return times, zones.pop(), inherits_timezone
 
 
@@ -183,8 +190,21 @@ def update(unit: str, data: object) -> dict:
             for t in requested["times"]
         )
     )
+    if not requested["times"]:
+        # systemd requires at least one trigger in a valid timer unit.
+        # Keep the stock trigger inert and record the cleared schedule.
+        content = (
+            HEADER
+            + "[Unit]\nConditionPathExists=!/\n"
+            + "[Timer]\n"
+            + EMPTY
+            + requested["timezone"]
+            + "\n"
+        )
     path.parent.mkdir(mode=0o755, exist_ok=True)
     try:
+        if not requested["enabled"]:
+            ctl("disable", "--now", unit)
         replace(path, content)
         ctl("daemon-reload")
         if daily_times(ctl("cat", unit))[:2] != (
@@ -192,7 +212,9 @@ def update(unit: str, data: object) -> dict:
             requested["timezone"],
         ):
             raise RuntimeError("An administrator override takes precedence.")
-        ctl("enable" if requested["enabled"] else "disable", "--now", unit)
+        if requested["enabled"]:
+            ctl("enable", unit)
+            ctl("restart", unit)
         actual = state(unit)
         if actual != requested:
             raise RuntimeError("Systemd did not apply the requested schedule.")
@@ -203,7 +225,11 @@ def update(unit: str, data: object) -> dict:
         else:
             replace(path, old)
         ctl("daemon-reload")
-        ctl("enable" if previous["enabled"] else "disable", "--now", unit)
+        if previous["enabled"]:
+            ctl("enable", unit)
+            ctl("restart", unit)
+        else:
+            ctl("disable", "--now", unit)
         raise
 
 
@@ -224,12 +250,17 @@ def serve(user: str) -> None:
                         raise ValueError("Invalid schedule request.")
                     msg = json.loads(line)
                     if msg == {"action": "read"}:
-                        response = state(unit)
+                        response = schedule_response(unit, state(unit))
+                    elif msg == {"action": "test"}:
+                        capture = unit.removesuffix(".timer") + ".service"
+                        ctl("start", "--no-block", capture)
+                        response = {"queued": True}
                     elif isinstance(msg, dict) and set(msg) == {"update"}:
-                        response = update(unit, msg["update"])
+                        response = schedule_response(
+                            unit, update(unit, msg["update"])
+                        )
                     else:
                         raise ValueError("Invalid schedule request.")
-                    response = schedule_response(unit, response)
                 except (
                     OSError,
                     ValueError,

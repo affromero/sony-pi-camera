@@ -144,6 +144,7 @@ test('serves admins and read-only invitees on the same hostname', { timeout: 800
   assert.equal((await get('/photos', family.cookie)).status, 200);
   assert.equal((await get('/controls', family.cookie)).status, 403);
   assert.equal((await post('/capture', {}, family.cookie)).status, 403);
+  assert.equal((await post('/api/schedule/test', {}, family.cookie)).status, 403);
   assert.equal((await post('/access/issue-invitation', {}, family.cookie)).status, 403);
   assert.deepEqual((await post('/capture', {}, owner.cookie)).data.files, ['capture.jpg']);
   assert.equal((await get('/schedule', owner.cookie)).data.enabled, false);
@@ -290,6 +291,8 @@ test('keeps viewer invitations read-only and admin AI credentials private', { ti
     else if (req.url === '/api/focus' && data.x === 0.5 && data.y === 0.5)
       return res.writeHead(200, { 'Content-Type': 'application/json' }).end('{"locked":true}');
     else if (req.url === '/api/delete' && data.name === 'nonempty/a %.raw') deleted = true;
+    else if (req.url === '/api/schedule/test')
+      return res.writeHead(202, { 'Content-Type': 'application/json' }).end('{"queued":true}');
     else return res.writeHead(404).end();
     res.end(JSON.stringify({ ok: true }));
   });
@@ -334,6 +337,10 @@ test('keeps viewer invitations read-only and admin AI credentials private', { ti
   assert.match(controls.data.toString(), /id="focus-target"/);
   assert.match(controls.data.toString(), /popovertarget="admin-menu"/);
   assert.match(controls.data.toString(), /id="admin-menu" popover/);
+  assert.equal((await post('/api/schedule/test', {})).status, 401);
+  const testCapture = await post('/api/schedule/test', {}, owner.cookie);
+  assert.equal(testCapture.status, 202);
+  assert.deepEqual(testCapture.data, { queued: true });
   assert.equal((await get('/admin.js')).status, 401);
   assert.equal((await get('/admin.js', owner.cookie)).status, 200);
   assert.equal((await get('/?manage=1', owner.cookie)).status, 404);

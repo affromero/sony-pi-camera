@@ -15,7 +15,7 @@ class ScheduleTest(unittest.TestCase):
     def test_rejects_invalid_times_and_unit_directive_injection(self):
         data = dict(enabled=False, times=["12:30"], timezone="UTC")
         for change in (
-            {"times": []},
+            {"times": [], "enabled": True},
             {"times": ["24:10"]},
             {"times": ["12:30"] * 2},
             {"times": ["12:30\nOnBootSec=5s"]},
@@ -81,6 +81,10 @@ class ScheduleTest(unittest.TestCase):
                     )
                 self.assertEqual(schedule.state(UNIT), saved)
                 self.assertEqual(admin.read_text(), original)
+                cleared = saved | {"times": []}
+                self.assertEqual(schedule.update(UNIT, cleared), cleared)
+                self.assertEqual(schedule.state(UNIT), cleared)
+                self.assertEqual(schedule.update(UNIT, saved), saved)
 
     def test_custom_calendars_require_an_administrator(self):
         for value in ("Mon 12:00", "*-*-* 12:30:20 UTC"):

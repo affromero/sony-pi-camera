@@ -625,6 +625,8 @@ class Handler(BaseHTTPRequestHandler):
             path = urlsplit(self.path).path
             if path == "/api/schedule":
                 self.send(schedule_request({"update": data}))
+            elif path == "/api/schedule/test":
+                self.send(schedule_request({"action": "test"}), status=202)
             elif path == "/api/capture":
                 with camera_control():
                     files = capture_photo(data.get("viewport"))

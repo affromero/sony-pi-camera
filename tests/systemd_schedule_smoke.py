@@ -58,9 +58,15 @@ def main() -> None:
         subprocess.run(
             ["systemctl", "is-enabled", "--quiet", unit], check=True
         )
+        updated_time = (later + timedelta(hours=1)).strftime("%H:%M")
+        updated = request(token, schedule | {"times": [updated_time]})
+        assert updated["times"] == [updated_time], updated
+        assert updated["nextCaptureAt"] > current["nextCaptureAt"], updated
     finally:
-        request(token, {**schedule, "enabled": False})
-    assert request(token)["enabled"] is False
+        request(token, {**schedule, "enabled": False, "times": []})
+    cleared = request(token)
+    assert cleared["enabled"] is False and cleared["times"] == [], cleared
+    assert cleared["nextCaptureAt"] is None, cleared
     assert subprocess.run(
         ["systemctl", "is-active", "--quiet", unit]
     ).returncode

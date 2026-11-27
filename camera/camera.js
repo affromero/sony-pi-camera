@@ -526,7 +526,11 @@ function addScheduleTime(value = '') {
   remove.title = 'Remove this time from the capture schedule';
   remove.className = 'secondary';
   remove.textContent = 'Remove';
-  remove.onclick = () => { row.remove(); scheduleEdited(); };
+  remove.onclick = () => {
+    row.remove();
+    if (!$('schedule-times').childElementCount) $('schedule-enabled').checked = false;
+    scheduleEdited();
+  };
   row.append(label, remove);
   $('schedule-times').append(row);
   return input;
@@ -565,7 +569,7 @@ function showSchedule(schedule) {
   $('schedule-enabled').checked = schedule.enabled;
   $('schedule-status').textContent = schedule.enabled
     ? 'Scheduled daily at ' + schedule.times.join(', ') + ' (' + schedule.timezone + ').'
-    : 'Daily captures are off.';
+    : schedule.times.length ? 'Daily captures are off.' : 'No daily captures scheduled.';
   nextCaptureAt = schedule.nextCaptureAt ?? null;
   void tickSchedule();
 }
@@ -596,6 +600,19 @@ document.addEventListener('visibilitychange', tickSchedule);
 $('schedule-retry').onclick = loadSchedule;
 $('schedule-form').oninput = scheduleEdited;
 $('schedule-add').onclick = () => { addScheduleTime().focus(); scheduleEdited(); };
+$('schedule-test').onclick = async () => {
+  const button = $('schedule-test');
+  button.disabled = true;
+  $('schedule-status').textContent = 'Starting test capture…';
+  try {
+    await post('/api/schedule/test', {});
+    $('schedule-status').textContent = 'Test capture queued. Check Photos on the Pi for the result.';
+  } catch (error) {
+    $('schedule-status').textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+};
 for (const zone of new Set(['UTC', ...(Intl.supportedValuesOf?.('timeZone') || [])])) {
   $('schedule-zones').append(new Option(zone));
 }
@@ -611,7 +628,7 @@ $('schedule-form').onsubmit = async event => {
   if (!scheduleLoaded || $('schedule-fields').disabled) return;
   const enabled = $('schedule-enabled').checked;
   const times = Array.from($('schedule-times').querySelectorAll('input'), input => input.value);
-  if (times.includes('') || !times.length) {
+  if (times.includes('') || (enabled && !times.length)) {
     $('schedule-status').textContent = 'Choose a time for each daily capture.';
     return;
   }
