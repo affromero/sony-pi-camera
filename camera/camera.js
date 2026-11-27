@@ -512,40 +512,120 @@ function syncPhotos() { if (connected() && !document.hidden) photos(); }
 setInterval(syncPhotos, 5000);
 document.addEventListener('visibilitychange', syncPhotos);
 function start() { syncVisibleSettings(); syncPhotos(); }
-function scheduleRow(time) {
+function solarLabel(rule) {
+  const event = rule.event === 'sunrise' ? 'Sunrise' : 'Sunset';
+  if (!rule.offset) return event;
+  return event + (rule.offset < 0 ? ' − ' : ' + ') + Math.abs(rule.offset) + ' min';
+}
+function scheduledDate(timestamp, timezone) {
+  return timestamp ? new Intl.DateTimeFormat(undefined, {
+    timeZone: timezone, weekday: 'short', hour: 'numeric', minute: '2-digit',
+  }).format(timestamp * 1000) : 'No event in the next week';
+}
+function scheduleRules(schedule) {
+  return [...schedule.times, ...(schedule.solar ?? [])];
+}
+function scheduleRow(rule) {
+  const fixed = typeof rule === 'string';
+  const label = fixed ? rule : solarLabel(rule);
   const row = document.createElement('li');
-  const label = document.createElement('time');
-  label.dateTime = label.textContent = time;
+  const detail = document.createElement('div');
+  const name = document.createElement('strong');
+  name.textContent = label;
+  detail.append(name);
+  if (!fixed && savedSchedule.enabled) {
+    const next = document.createElement('small');
+    const index = savedSchedule.solar.indexOf(rule);
+    next.textContent = scheduledDate(savedSchedule.solarNext?.[index], savedSchedule.timezone);
+    detail.append(next);
+  }
   const edit = document.createElement('button');
   edit.type = 'button';
   edit.className = 'secondary';
   edit.textContent = 'Edit';
-  edit.setAttribute('aria-label', 'Edit ' + time);
+  edit.setAttribute('aria-label', 'Edit ' + label);
   edit.onclick = () => {
-    editingTime = time;
-    $('schedule-time-label').textContent = 'Edit capture time';
-    $('schedule-time').value = time;
-    $('schedule-time').focus();
+    editingTime = rule;
+    $('schedule-time-label').textContent = 'Edit capture';
+    $('schedule-kind').value = fixed ? 'fixed' : rule.event;
+    $('schedule-time').value = fixed ? rule : '';
+    $('schedule-offset').value = fixed ? 0 : Math.abs(rule.offset);
+    $('schedule-offset-direction').value = !fixed && rule.offset < 0 ? '-1' : '1';
+    syncScheduleTrigger();
+    $('schedule-kind').focus();
   };
   const remove = document.createElement('button');
   remove.type = 'button';
   remove.className = 'secondary schedule-remove';
   remove.textContent = '×';
-  remove.title = 'Delete ' + time;
-  remove.setAttribute('aria-label', 'Delete ' + time);
+  remove.title = 'Delete ' + label;
+  remove.setAttribute('aria-label', 'Delete ' + label);
   remove.onclick = () => {
-    const times = savedSchedule.times.filter(value => value !== time);
-    const consequence = times.length ? '' : ' This turns off daily captures.';
+    const remaining = scheduleRules(savedSchedule).filter(value => value !== rule);
+    const consequence = remaining.length ? '' : ' This turns off daily captures.';
     const discard = scheduleDirty ? ' Unsaved changes will be discarded.' : '';
-    if (!confirm('Delete the ' + time + ' capture time?' + consequence + discard)) return;
-    const { enabled, timezone } = savedSchedule;
-    void saveSchedule({enabled: enabled && times.length > 0, times, timezone}, 'Deleting capture time…');
+    if (!confirm('Delete the ' + label + ' capture?' + consequence + discard)) return;
+    const { enabled, timezone, location } = savedSchedule;
+    void saveSchedule(schedulePayload(remaining, enabled && remaining.length > 0, timezone, location),
+      'Deleting capture…');
   };
-  row.append(label, edit, remove);
+  row.append(detail, edit, remove);
   return row;
 }
+function syncScheduleTrigger() {
+  const kind = $('schedule-kind').value;
+  $('schedule-time').hidden = kind !== 'fixed';
+  $('schedule-solar').hidden = kind !== 'sunrise' && kind !== 'sunset';
+  $('schedule-solar-preview').textContent = '';
+}
+function schedulePayload(rules, enabled, timezone, location) {
+  return {
+    enabled, timezone, location,
+    times: rules.filter(rule => typeof rule === 'string'),
+    solar: rules.filter(rule => typeof rule !== 'string'),
+  };
+}
+function solarLocation() {
+  const latitude = $('schedule-latitude').valueAsNumber;
+  const longitude = $('schedule-longitude').valueAsNumber;
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) ||
+      Math.abs(latitude) > 90 || Math.abs(longitude) > 180)
+    throw new Error('Enter the camera latitude and longitude.');
+  return {latitude, longitude};
+}
+function draftRule() {
+  const event = $('schedule-kind').value;
+  if (event === 'fixed') {
+    const time = $('schedule-time').value;
+    if (!time) throw new Error('Choose a capture time.');
+    return time;
+  }
+  if (!event) return null;
+  const offset = $('schedule-offset').valueAsNumber;
+  if (!Number.isInteger(offset) || offset < 0 || offset > 720)
+    throw new Error('Enter an offset from 0 to 720 minutes.');
+  return {event, offset: offset * Number($('schedule-offset-direction').value)};
+}
+$('schedule-kind').onchange = syncScheduleTrigger;
+$('schedule-preview').onclick = async () => {
+  const output = $('schedule-solar-preview');
+  const button = $('schedule-preview');
+  button.disabled = true;
+  try {
+    const timezone = $('schedule-zone').value.trim();
+    const draft = schedulePayload([draftRule()], false, timezone, solarLocation());
+    const response = await post('/api/schedule/preview', draft);
+    const { solarNext } = await response.json();
+    output.textContent = scheduledDate(solarNext[0], timezone);
+  } catch (error) {
+    output.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+};
 function scheduleEdited() {
   scheduleDirty = true;
+  $('schedule-solar-preview').textContent = '';
   $('schedule-status').textContent = 'Unsaved changes';
 }
 let nextCaptureAt = null;
@@ -568,7 +648,12 @@ async function tickSchedule() {
   if (seconds === 0) {
     try {
       const response = await api('/api/schedule');
-      nextCaptureAt = (await response.json()).nextCaptureAt ?? null;
+      const schedule = await response.json();
+      nextCaptureAt = schedule.nextCaptureAt ?? null;
+      if (!scheduleDirty && editingTime === undefined && savedSchedule) {
+        savedSchedule = schedule;
+        $('schedule-times').replaceChildren(...scheduleRules(schedule).map(scheduleRow));
+      }
     } catch (error) {
       countdown.textContent = error.message;
     }
@@ -580,14 +665,21 @@ function showSchedule(schedule) {
   scheduleDirty = false;
   editingTime = undefined;
   $('schedule-time').value = '';
-  $('schedule-time-label').textContent = 'Add a time';
-  $('schedule-times').replaceChildren(...schedule.times.map(scheduleRow));
-  $('schedule-empty').hidden = schedule.times.length > 0;
+  $('schedule-kind').value = '';
+  $('schedule-offset').value = 0;
+  $('schedule-offset-direction').value = '1';
+  $('schedule-latitude').value = schedule.location?.latitude ?? '';
+  $('schedule-longitude').value = schedule.location?.longitude ?? '';
+  $('schedule-time-label').textContent = 'Add a capture';
+  syncScheduleTrigger();
+  const rules = scheduleRules(schedule);
+  $('schedule-times').replaceChildren(...rules.map(scheduleRow));
+  $('schedule-empty').hidden = rules.length > 0;
   $('schedule-zone').value = (schedule.inheritsTimezone && localZone) || schedule.timezone;
   $('schedule-enabled').checked = schedule.enabled;
   $('schedule-status').textContent = schedule.enabled
-    ? 'Scheduled daily at ' + schedule.times.join(', ') + ' (' + schedule.timezone + ').'
-    : schedule.times.length ? 'Daily captures are off.' : 'No daily captures scheduled.';
+    ? 'Daily captures are on (' + schedule.timezone + ').'
+    : rules.length ? 'Daily captures are off.' : 'No daily captures scheduled.';
   nextCaptureAt = schedule.nextCaptureAt ?? null;
   void tickSchedule();
 }
@@ -655,19 +747,18 @@ async function saveSchedule(schedule, message) {
 $('schedule-form').onsubmit = event => {
   event.preventDefault();
   if (!scheduleLoaded || $('schedule-fields').disabled) return;
-  const enabled = $('schedule-enabled').checked;
-  const value = $('schedule-time').value;
-  const times = savedSchedule.times.filter(time => time !== editingTime);
-  if (value) times.push(value);
-  if ((editingTime && !value) || (enabled && !times.length)) {
-    $('schedule-status').textContent = 'Choose a capture time.';
-    return;
+  try {
+    const enabled = $('schedule-enabled').checked;
+    const draft = draftRule();
+    if (editingTime !== undefined && !draft) throw new Error('Choose a capture trigger.');
+    const rules = scheduleRules(savedSchedule).filter(rule => rule !== editingTime);
+    if (draft !== null) rules.push(draft);
+    if (enabled && !rules.length) throw new Error('Choose a capture trigger.');
+    const location = draft && typeof draft !== 'string' ? solarLocation() : savedSchedule.location;
+    void saveSchedule(schedulePayload(rules, enabled, $('schedule-zone').value.trim(), location), 'Saving schedule…');
+  } catch (error) {
+    $('schedule-status').textContent = error.message;
   }
-  if (new Set(times).size !== times.length) {
-    $('schedule-status').textContent = 'Choose a different time for each capture.';
-    return;
-  }
-  void saveSchedule({enabled, times, timezone: $('schedule-zone').value.trim()}, 'Saving schedule…');
 };
 if (sidedoor) {
   $('admin-schedule-slot')?.replaceWith($('capture-schedule'));

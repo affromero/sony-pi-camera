@@ -1,0 +1,10 @@
+[Unit]
+Description=Keep solar capture times current for %i
+
+[Timer]
+OnBootSec=2min
+OnCalendar=*-*-* 03:17:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target

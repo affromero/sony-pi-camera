@@ -27,8 +27,18 @@
 <input id="schedule-zone" list="schedule-zones" required placeholder="America/Chicago">
 <button class="secondary" type="button" id="schedule-local-zone" hidden>Use my time zone</button></div>
 <datalist id="schedule-zones"></datalist>
-<div class="schedule-time"><label for="schedule-time" id="schedule-time-label">Add a time</label>
-<input id="schedule-time" type="time"></div>
+<div class="schedule-zone"><label for="schedule-kind" id="schedule-time-label">Add a capture</label>
+<select id="schedule-kind"><option value="">Choose trigger</option><option value="fixed">Fixed time</option>
+<option value="sunrise">Sunrise</option><option value="sunset">Sunset</option></select>
+<input id="schedule-time" type="time" aria-label="Capture time" hidden>
+<div id="schedule-solar" hidden>
+<div class="schedule-time"><label for="schedule-offset">Offset</label><input id="schedule-offset" type="number" min="0" max="720" value="0">
+<select id="schedule-offset-direction" aria-label="Minutes before or after"><option value="1">minutes after</option><option value="-1">minutes before</option></select></div>
+<div class="schedule-zone"><label for="schedule-latitude">Camera latitude</label><input id="schedule-latitude" type="number" min="-90" max="90" step="any">
+<label for="schedule-longitude">Camera longitude</label><input id="schedule-longitude" type="number" min="-180" max="180" step="any"></div>
+<button class="secondary" type="button" id="schedule-preview">Preview next time</button>
+<p id="schedule-solar-preview" role="status"></p>
+</div></div>
 <div class="schedule-actions">
 <button class="secondary" type="submit" title="Apply the selected daily capture times and time zone">Save schedule</button>
 <button class="secondary" type="button" id="schedule-test" title="Run the scheduled capture job once with saved settings">Test now</button>

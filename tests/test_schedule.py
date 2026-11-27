@@ -2,6 +2,7 @@
 
 import tempfile
 import unittest
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
@@ -12,6 +13,31 @@ UNIT = "sony-pi-capture@operator.timer"
 
 
 class ScheduleTest(unittest.TestCase):
+    def test_solar_offsets_follow_the_sun_and_skip_unavailable_events(self):
+        now = datetime(2026, 11, 27, 12, tzinfo=UTC)
+        config = dict(
+            enabled=True,
+            times=[],
+            timezone="America/Chicago",
+            location={"latitude": 41.88, "longitude": -87.63},
+            solar=[
+                {"event": "sunrise", "offset": 0},
+                {"event": "sunrise", "offset": 10},
+                {"event": "sunset", "offset": -20},
+            ],
+        )
+        rise, after, before = schedule.solar_occurrences(
+            schedule.validate(config), now
+        )
+        self.assertEqual(after[0] - rise[0], timedelta(minutes=10))
+        self.assertNotEqual(rise[0].time(), rise[1].time())
+        self.assertGreater(before[0], rise[0])
+        polar = config | {
+            "location": {"latitude": 90, "longitude": 0},
+            "solar": [{"event": "sunrise", "offset": 0}],
+        }
+        self.assertEqual(schedule.solar_occurrences(polar, now), [[]])
+
     def test_rejects_invalid_times_and_unit_directive_injection(self):
         data = dict(enabled=False, times=["12:30"], timezone="UTC")
         for change in (

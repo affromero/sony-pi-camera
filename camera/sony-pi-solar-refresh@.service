@@ -1,0 +1,14 @@
+[Unit]
+Description=Refresh solar capture times for %i
+Requires=sony-pi-schedule@%i.socket
+After=sony-pi-schedule@%i.socket time-sync.target
+
+[Service]
+Type=oneshot
+User=%i
+ExecStart=/usr/bin/python3 -I /opt/pi-camera/schedule.py --refresh %i
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+RestrictAddressFamilies=AF_UNIX

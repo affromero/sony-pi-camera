@@ -627,6 +627,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send(schedule_request({"update": data}))
             elif path == "/api/schedule/test":
                 self.send(schedule_request({"action": "test"}), status=202)
+            elif path == "/api/schedule/preview":
+                self.send(schedule_request({"preview": data}))
             elif path == "/api/capture":
                 with camera_control():
                     files = capture_photo(data.get("viewport"))

@@ -63,6 +63,6 @@ jobs:
         env:
           RUNNER_ENVIRONMENT: ${{ runner.environment }}
         run: |
-          sudo apt-get install --yes python3-pil
+          sudo apt-get install --yes python3-pil python3-astral
           sudo sh camera/install.sh
           uv run --frozen python tests/systemd_schedule_smoke.py

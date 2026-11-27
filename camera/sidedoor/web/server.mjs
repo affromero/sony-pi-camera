@@ -61,6 +61,7 @@ const controlRoutes = new Set([
   'GET /api/photos', 'GET /api/photos?details=1',
   'POST /api/capture', 'POST /api/setting', 'POST /api/focus',
   'POST /api/magnifier', 'POST /api/schedule', 'POST /api/schedule/test', 'POST /api/delete',
+  'POST /api/schedule/preview',
 ]);
 
 function send(response, status, value, type) {

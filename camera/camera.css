@@ -34,6 +34,9 @@ dialog{border:0;padding:0;border-radius:14px;width:min(1100px,calc(100vw - 32px)
 #schedule-times{list-style:none;padding:0;margin:0;display:grid;gap:.35rem}
 #schedule-times li{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:.4rem;background:#f5f5f7;border-radius:.65rem;padding:.35rem .4rem .35rem .7rem}
 #schedule-times time{font-weight:650;font-variant-numeric:tabular-nums}
+#schedule-times small{display:block;color:#616168;font-size:.78rem;margin-top:.2rem}
+#schedule-solar:not([hidden]){display:grid;gap:.5rem}
+.schedule #schedule-offset{width:5rem}
 #schedule-times .schedule-remove{color:#a12420;min-width:2.5rem;font-size:1.15rem}
 #camera-controls{border:0;padding:0;margin:0;min-width:0}
 #camera-controls:disabled .shutter,#camera-controls:disabled .secondary{opacity:.5;cursor:wait}

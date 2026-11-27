@@ -11,6 +11,10 @@ if [ ! -x "$backend_binary" ]; then
   printf 'Build the required Rust camera backend before running the installer. See SETUP.md.\n' >&2
   exit 1
 fi
+if ! /usr/bin/python3 -I -c 'import astral' 2>/dev/null; then
+  printf 'Install python3-astral before running the installer. See SETUP.md.\n' >&2
+  exit 1
+fi
 camera_home=$(getent passwd "$SUDO_USER" | cut -d: -f6)
 config_dir="$camera_home/.config/sony-pi-camera"
 install -d -m 700 -o "$SUDO_USER" "$config_dir"
@@ -96,6 +100,8 @@ install -m 644 "$project_dir/pi-camera-transfer@.service" /etc/systemd/system/
 install -m 644 "$project_dir/sony-pi-capture@.service" \
   "$project_dir/sony-pi-schedule@.socket" \
   "$project_dir/sony-pi-schedule@.service" \
+  "$project_dir/sony-pi-solar-refresh@.service" \
+  "$project_dir/sony-pi-solar-refresh@.timer" \
   "$project_dir/sony-pi-capture@.timer" \
   "$project_dir/sony-pi-viewer@.service" \
   "$project_dir/sony-pi-lan-name@.service" \
@@ -103,6 +109,7 @@ install -m 644 "$project_dir/sony-pi-capture@.service" \
 systemctl daemon-reload
 systemctl enable --now "sony-pi-schedule@$SUDO_USER.socket"
 systemctl try-restart "sony-pi-schedule@$SUDO_USER.service"
+systemctl enable --now "sony-pi-solar-refresh@$SUDO_USER.timer"
 if [ -f /etc/systemd/system/pi-field-notes-camera@.service ]; then
   systemctl disable --now "pi-field-notes-camera@$SUDO_USER.service"
 fi

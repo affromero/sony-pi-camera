@@ -62,6 +62,17 @@ def main() -> None:
         updated = request(token, schedule | {"times": [updated_time]})
         assert updated["times"] == [updated_time], updated
         assert updated["nextCaptureAt"] > current["nextCaptureAt"], updated
+        solar = request(
+            token,
+            schedule
+            | {
+                "location": {"latitude": 41.88, "longitude": -87.63},
+                "solar": [{"event": "sunrise", "offset": 10}],
+            },
+        )
+        assert solar["solarNext"][0] > 0, solar
+        assert solar["nextCaptureAt"] > 0, solar
+        assert request(token)["solar"] == solar["solar"], solar
     finally:
         request(token, {**schedule, "enabled": False, "times": []})
     cleared = request(token)
