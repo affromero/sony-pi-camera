@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -121,10 +122,25 @@ def solar_occurrences(settings: dict, now: datetime) -> list[list[datetime]]:
     return result
 
 
-def saved_rules(unit_text: str) -> dict | None:
+def calendar_hash(entries: list[str]) -> str:
+    return sha256("\n".join(entries).encode()).hexdigest()
+
+
+def saved_rules(unit_text: str, *, armed: bool) -> dict | None:
     for line in unit_text.splitlines():
         if line.startswith(SOLAR):
-            return validate(json.loads(line.removeprefix(SOLAR)))
+            data = json.loads(line.removeprefix(SOLAR))
+            entries, cleared_zone = timer_calendar(unit_text)
+            expected = data["calendarHash"]
+            if data["armed"] != armed or (
+                calendar_hash(entries) != expected
+                if expected
+                else not cleared_zone
+            ):
+                raise RuntimeError(
+                    "The capture timer changed outside the camera dashboard."
+                )
+            return validate(data["settings"])
     return None
 
 
@@ -211,7 +227,7 @@ def state(unit: str) -> dict:
     ) not in {("enabled", "active"), ("disabled", "inactive")}:
         raise RuntimeError("Timer state requires administrator attention.")
     body = ctl("cat", unit)
-    rules = saved_rules(body)
+    rules = saved_rules(body, armed=enabled == "enabled")
     if rules is not None:
         if not rules["enabled"] and enabled == "enabled":
             raise RuntimeError("The disabled schedule has an active timer.")
@@ -297,9 +313,15 @@ def update(unit: str, data: object, *, refresh: bool = False) -> dict:
         content += "".join(
             f"OnCalendar={at:%Y-%m-%d %H:%M:%S} UTC\n" for at in dates
         )
-    if requested.get("solar") or requested.get("location"):
-        content += SOLAR + json.dumps(requested, separators=(",", ":")) + "\n"
     armed = requested["enabled"] and bool(requested["times"] or dates)
+    if requested.get("solar") or requested.get("location"):
+        entries, cleared_zone = timer_calendar(content)
+        record = {
+            "settings": requested,
+            "armed": armed,
+            "calendarHash": None if cleared_zone else calendar_hash(entries),
+        }
+        content += SOLAR + json.dumps(record, separators=(",", ":")) + "\n"
     path.parent.mkdir(mode=0o755, exist_ok=True)
     was_armed = (
         ctl("show", "-p", "UnitFileState", "--value", unit) == "enabled"
