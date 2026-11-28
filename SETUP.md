@@ -163,6 +163,8 @@ Choose **Sunrise** or **Sunset** to capture at a solar event. Enter the camera c
 
 Save **Camera location** to see tomorrow's sunrise, sunset and weather. The card shows the next scheduled shot and marks it on the arc when it falls during tomorrow's daylight. The forecast request sends coordinates rounded to two decimal places to [Open-Meteo](https://open-meteo.com/). Weather availability does not affect captures.
 
+When you are near the camera, select **Use my location** on the HTTPS page and allow the browser's location request. Review the filled coordinates and select **Save schedule**. Enter coordinates manually when setting up the camera from elsewhere.
+
 The Pi uses Open-Meteo's free forecast endpoint and caches results in 30-minute windows. The free endpoint has no uptime guarantee. If it cannot return tomorrow's forecast, the card shows **Weather forecast unavailable**. The Pi calculates sunrise and sunset locally and takes scheduled captures independently. [Open-Meteo API and availability](https://open-meteo.com/en/pricing)
 
 **Test now** queues one capture through the same job as the timer, using the saved AI settings. Check **Photos on the Pi** for the result. You can test while daily captures are off.

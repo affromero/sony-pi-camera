@@ -595,6 +595,35 @@ function solarLocation() {
     throw new Error('Enter the camera latitude and longitude.');
   return {latitude, longitude};
 }
+$('schedule-use-location').onclick = () => {
+  const button = $('schedule-use-location');
+  const status = $('schedule-location-status');
+  if (!window.isSecureContext || !navigator.geolocation) {
+    status.textContent = 'Open the HTTPS camera page to use your location, or enter coordinates below.';
+    return;
+  }
+  const latitude = $('schedule-latitude');
+  const longitude = $('schedule-longitude');
+  const initial = [latitude.value, longitude.value];
+  button.disabled = true;
+  status.textContent = 'Finding your location…';
+  navigator.geolocation.getCurrentPosition(({coords}) => {
+    button.disabled = false;
+    if (latitude.value !== initial[0] || longitude.value !== initial[1]) {
+      status.textContent = 'Your entered coordinates were kept.';
+      return;
+    }
+    latitude.value = coords.latitude;
+    longitude.value = coords.longitude;
+    status.textContent = 'Location filled in. Save the schedule to apply it.';
+    scheduleEdited();
+  }, error => {
+    button.disabled = false;
+    status.textContent = error.code === 1
+      ? 'Location permission was denied. Allow access in your browser settings or enter coordinates below.'
+      : 'Your location could not be found. Try again or enter coordinates below.';
+  }, {enableHighAccuracy: true, maximumAge: 0, timeout: 15000});
+};
 function draftRule() {
   const event = $('schedule-kind').value;
   if (event === 'fixed') {

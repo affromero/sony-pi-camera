@@ -29,9 +29,11 @@
 <datalist id="schedule-zones"></datalist>
 <details class="schedule-location">
 <summary>Camera location</summary>
+<button class="secondary" type="button" id="schedule-use-location" title="Ask this device for its precise location">Use my location</button>
+<p id="schedule-location-status" role="status"></p>
 <div class="schedule-zone"><label for="schedule-latitude">Latitude</label><input id="schedule-latitude" type="number" min="-90" max="90" step="any">
 <label for="schedule-longitude">Longitude</label><input id="schedule-longitude" type="number" min="-180" max="180" step="any"></div>
-<p>Weather uses rounded coordinates.</p>
+<p>Use this device’s location when you’re near the camera. Weather uses rounded coordinates.</p>
 </details>
 <div class="schedule-zone"><label for="schedule-kind" id="schedule-time-label">Add a capture</label>
 <select id="schedule-kind"><option value="">Choose trigger</option><option value="fixed">Fixed time</option>
