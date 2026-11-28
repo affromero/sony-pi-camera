@@ -412,13 +412,15 @@ def serve(user: str) -> None:
                         response = {"ok": True}
                     elif isinstance(msg, dict) and set(msg) == {"preview"}:
                         settings = validate(msg["preview"])
+                        now = datetime.now(UTC)
                         response = {
+                            "location": settings.get("location"),
+                            "timezone": settings["timezone"],
+                            "tomorrowSun": tomorrow_sun(settings, now),
                             "solarNext": [
                                 int(dates[0].timestamp()) if dates else None
-                                for dates in solar_occurrences(
-                                    settings, datetime.now(UTC)
-                                )
-                            ]
+                                for dates in solar_occurrences(settings, now)
+                            ],
                         }
                     elif isinstance(msg, dict) and set(msg) == {"update"}:
                         response = schedule_response(

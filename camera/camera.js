@@ -613,6 +613,7 @@ function fillCameraLocation(latitude, longitude, centerMap = true) {
   if (centerMap && locationMap) locationMap.jumpTo({center:[longitude, latitude], zoom:14});
   $('schedule-location-status').textContent = 'Location selected. Save the schedule to apply it.';
   scheduleEdited();
+  previewLocation();
 }
 addressInput.oninput = () => {
   clearTimeout(addressDelay);
@@ -810,6 +811,58 @@ function scheduleEdited() {
   $('schedule-status').textContent = 'Unsaved changes';
 }
 let outlookKey;
+let locationPreviewDelay;
+let locationPreviewRequest;
+let previewingLocation = false;
+
+function cancelLocationPreview() {
+  clearTimeout(locationPreviewDelay);
+  locationPreviewRequest?.abort();
+  locationPreviewRequest = undefined;
+}
+function previewLocation() {
+  if (!savedSchedule) return;
+  cancelLocationPreview();
+  const timezone = $('schedule-zone').value.trim();
+  const latitude = $('schedule-latitude').valueAsNumber;
+  const longitude = $('schedule-longitude').valueAsNumber;
+  if ((!savedSchedule.location && !$('schedule-latitude').value && !$('schedule-longitude').value) ||
+      (timezone === savedSchedule.timezone && latitude === savedSchedule.location?.latitude &&
+        longitude === savedSchedule.location?.longitude)) {
+    previewingLocation = false;
+    showOutlook(savedSchedule);
+    return;
+  }
+  previewingLocation = true;
+  outlookKey = undefined;
+  $('schedule-outlook').hidden = false;
+  $('schedule-outlook-title').textContent = 'Tomorrow · Location preview';
+  $('outlook-date').textContent = '';
+  $('outlook-daylight').hidden = true;
+  $('outlook-shot').hidden = true;
+  $('outlook-source').hidden = true;
+  const status = $('outlook-weather');
+  let location;
+  try {
+    location = solarLocation();
+  } catch (error) {
+    status.textContent = error.message;
+    return;
+  }
+  status.textContent = 'Calculating sunrise, sunset and weather…';
+  locationPreviewDelay = setTimeout(async () => {
+    const request = new AbortController();
+    locationPreviewRequest = request;
+    try {
+      const draft = schedulePayload([], false, timezone, location);
+      const response = await post('/api/schedule/outlook', draft, request.signal);
+      const outlook = await response.json();
+      if (!request.signal.aborted) showOutlook(outlook, true);
+    } catch (error) {
+      if (!request.signal.aborted) status.textContent = error.message;
+    }
+  }, 300);
+}
 function forecastDescription(code) {
   if (code === 0) return 'Clear';
   if (code <= 3) return ['Clear', 'Mostly clear', 'Partly cloudy', 'Overcast'][code];
@@ -819,10 +872,12 @@ function forecastDescription(code) {
   if (code <= 86) return 'Snow';
   return 'Thunderstorms';
 }
-function showOutlook(schedule) {
+function showOutlook(schedule, preview = false) {
   const card = $('schedule-outlook');
   const sun = schedule.tomorrowSun;
   card.hidden = false;
+  $('schedule-outlook-title').textContent = preview ? 'Tomorrow · Location preview' : 'Tomorrow';
+  $('outlook-shot').hidden = preview;
   const options = {timeZone: schedule.timezone, hour: 'numeric', minute: '2-digit'};
   const formatTime = new Intl.DateTimeFormat(undefined, options);
   const formatShot = new Intl.DateTimeFormat(undefined, {
@@ -851,6 +906,10 @@ function showOutlook(schedule) {
     marker.style.left = 50 * (1 - Math.cos(position)) + '%';
     marker.style.top = 100 * (1 - Math.sin(position)) + '%';
   }
+  if (preview) {
+    showForecast(schedule.forecast, sun.date);
+    return;
+  }
   const key = JSON.stringify([schedule.location, schedule.timezone, sun.date, Math.floor(Date.now() / 1800000)]);
   if (key === outlookKey) return;
   outlookKey = key;
@@ -866,9 +925,13 @@ async function loadForecast(key, date) {
     // Keep the offline solar preview visible if weather cannot load.
   }
   if (key !== outlookKey) return;
+  if (forecast?.date !== date) outlookKey = undefined;
+  showForecast(forecast, date);
+}
+function showForecast(forecast, date) {
   if (forecast?.date !== date) {
-    outlookKey = undefined;
     $('outlook-weather').textContent = 'Weather forecast unavailable.';
+    $('outlook-source').hidden = true;
     return;
   }
   const temp = new Intl.NumberFormat(undefined, {
@@ -904,7 +967,7 @@ async function tickSchedule() {
       const response = await api('/api/schedule');
       const schedule = await response.json();
       nextCaptureAt = schedule.nextCaptureAt ?? null;
-      showOutlook(schedule);
+      if (!previewingLocation) showOutlook(schedule);
       if (!scheduleDirty && editingTime === undefined && savedSchedule) {
         savedSchedule = schedule;
         $('schedule-times').replaceChildren(...scheduleRules(schedule).map(scheduleRow));
@@ -916,6 +979,8 @@ async function tickSchedule() {
   countdownTimer = setTimeout(tickSchedule, seconds > 0 ? 1000 : 5000);
 }
 function showSchedule(schedule) {
+  cancelLocationPreview();
+  previewingLocation = false;
   savedSchedule = schedule;
   scheduleDirty = false;
   editingTime = undefined;
@@ -963,7 +1028,7 @@ async function loadSchedule() {
 $('capture-schedule').ontoggle = () => {
   if ($('capture-schedule').open) {
     loadSchedule();
-    if (savedSchedule) showOutlook(savedSchedule);
+    if (savedSchedule && !previewingLocation) showOutlook(savedSchedule);
   }
   void tickSchedule();
 };
@@ -971,6 +1036,7 @@ document.addEventListener('visibilitychange', tickSchedule);
 $('schedule-retry').onclick = loadSchedule;
 $('schedule-form').oninput = event => {
   if (event.target !== addressInput) scheduleEdited();
+  if (['schedule-latitude', 'schedule-longitude', 'schedule-zone'].includes(event.target.id)) previewLocation();
 };
 $('schedule-test').onclick = async () => {
   const button = $('schedule-test');
@@ -993,7 +1059,7 @@ if (localZone) {
   const localZoneButton = $('schedule-local-zone');
   localZoneButton.hidden = false;
   localZoneButton.title = 'Use ' + localZone + ' for daily capture times';
-  localZoneButton.onclick = () => { $('schedule-zone').value = localZone; scheduleEdited(); };
+  localZoneButton.onclick = () => { $('schedule-zone').value = localZone; scheduleEdited(); previewLocation(); };
 }
 async function saveSchedule(schedule, message) {
   $('schedule-fields').disabled = true;

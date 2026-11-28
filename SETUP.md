@@ -161,7 +161,7 @@ Under **Scheduled captures**, add a time or select **Edit** beside a saved time,
 
 Choose **Sunrise** or **Sunset** to capture at a solar event. Enter the camera coordinates and the number of minutes before or after the event. **Preview next time** calculates the next occurrence without saving or taking a photo. Solar triggers use the schedule's time zone to choose the date, and calculations work offline. The Pi refreshes the upcoming solar times at boot and daily. A missed capture is skipped if the Pi was off.
 
-Save **Camera location** to see tomorrow's sunrise, sunset and weather. The card shows the next scheduled shot and marks it on the arc when it falls during tomorrow's daylight. The forecast request sends coordinates rounded to two decimal places to [Open-Meteo](https://open-meteo.com/). Weather availability does not affect captures.
+Choose **Camera location** to preview tomorrow's sunrise, sunset and weather before saving. For a saved location, the card shows the next scheduled shot and marks it on the arc when it falls during tomorrow's daylight. The forecast request sends coordinates rounded to two decimal places to [Open-Meteo](https://open-meteo.com/). Weather availability does not affect captures.
 
 Under **Camera location**, use your device's location on HTTPS, search for an address, or open **Pick on the globe** and zoom in to drop a pin. Review the coordinates and select **Save schedule**. You can also enter the coordinates directly.
 

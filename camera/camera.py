@@ -495,6 +495,20 @@ def tomorrow_forecast(
         return None
 
 
+def schedule_forecast(settings: dict) -> dict | None:
+    location = settings.get("location")
+    day = settings.get("tomorrowSun")
+    if not location or not day:
+        return None
+    return tomorrow_forecast(
+        round(location["latitude"], 2),
+        round(location["longitude"], 2),
+        settings["timezone"],
+        day["date"],
+        int(time.time() // 1800),
+    )
+
+
 def address_matches(data: object) -> list[dict]:
     query = data.get("query") if isinstance(data, dict) else None
     if not isinstance(query, str) or not 5 <= len(query.strip()) <= 160:
@@ -673,20 +687,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send(schedule_request({"action": "read"}))
             elif path == "/api/schedule/forecast":
                 settings = schedule_request({"action": "read"})
-                location, day = (
-                    settings.get("location"),
-                    settings.get("tomorrowSun"),
-                )
-                forecast = None
-                if location and day:
-                    forecast = tomorrow_forecast(
-                        round(location["latitude"], 2),
-                        round(location["longitude"], 2),
-                        settings["timezone"],
-                        day["date"],
-                        int(time.time() // 1800),
-                    )
-                self.send({"forecast": forecast})
+                self.send({"forecast": schedule_forecast(settings)})
             elif path == "/api/settings":
                 with camera_read():
                     values = settings_snapshot()
@@ -768,6 +769,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.send(schedule_request({"action": "test"}), status=202)
             elif path == "/api/schedule/preview":
                 self.send(schedule_request({"preview": data}))
+            elif path == "/api/schedule/outlook":
+                settings = schedule_request({"preview": data})
+                self.send(
+                    {**settings, "forecast": schedule_forecast(settings)}
+                )
             elif path == "/api/schedule/address":
                 self.send({"matches": address_matches(data)})
             elif path == "/api/capture":

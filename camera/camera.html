@@ -46,6 +46,14 @@
 <label for="schedule-longitude">Longitude</label><input id="schedule-longitude" type="number" min="-180" max="180" step="any"></div>
 <p>Use this device’s location when you’re near the camera. Address search uses <a href="https://photon.komoot.io/" target="_blank" rel="noopener noreferrer">Photon</a> and <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>. Weather uses rounded coordinates.</p>
 </details>
+<section id="schedule-outlook" class="schedule-outlook" aria-labelledby="schedule-outlook-title" hidden>
+<header class="outlook-heading"><h3 id="schedule-outlook-title">Tomorrow</h3><span id="outlook-date"></span></header>
+<div id="outlook-daylight"><div class="outlook-path" aria-hidden="true"><div class="outlook-arc"></div><span id="outlook-marker" hidden></span></div>
+<div class="outlook-sun"><div>Sunrise<strong id="outlook-sunrise"></strong></div><div>Sunset<strong id="outlook-sunset"></strong></div></div></div>
+<div class="outlook-shot" id="outlook-shot"><span>Next scheduled shot</span><strong id="outlook-next"></strong></div>
+<p id="outlook-weather" class="outlook-weather" role="status"></p>
+<a id="outlook-source" href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer" hidden>Open-Meteo forecast</a>
+</section>
 <div class="schedule-zone"><label for="schedule-kind" id="schedule-time-label">Add a capture</label>
 <select id="schedule-kind"><option value="">Choose trigger</option><option value="fixed">Fixed time</option>
 <option value="sunrise">Sunrise</option><option value="sunset">Sunset</option></select>
@@ -67,14 +75,6 @@
 </section>
 </fieldset></form><p role="status" id="schedule-status"></p>
 <p id="schedule-next" hidden></p>
-<section id="schedule-outlook" class="schedule-outlook" aria-labelledby="schedule-outlook-title" hidden>
-<header class="outlook-heading"><h3 id="schedule-outlook-title">Tomorrow</h3><span id="outlook-date"></span></header>
-<div id="outlook-daylight"><div class="outlook-path" aria-hidden="true"><div class="outlook-arc"></div><span id="outlook-marker" hidden></span></div>
-<div class="outlook-sun"><div>Sunrise<strong id="outlook-sunrise"></strong></div><div>Sunset<strong id="outlook-sunset"></strong></div></div></div>
-<div class="outlook-shot"><span>Next scheduled shot</span><strong id="outlook-next"></strong></div>
-<p id="outlook-weather" class="outlook-weather" role="status"></p>
-<a id="outlook-source" href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer" hidden>Open-Meteo forecast</a>
-</section>
 <button class="secondary" id="schedule-retry" hidden>Retry loading schedule</button></details>
 <section class="library"><h2>Photos on the Pi</h2>
 <div class="gallery-filters">

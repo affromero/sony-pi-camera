@@ -146,6 +146,7 @@ test('serves admins and read-only invitees on the same hostname', { timeout: 800
   assert.equal((await post('/capture', {}, family.cookie)).status, 403);
   assert.equal((await post('/api/schedule/test', {}, family.cookie)).status, 403);
   assert.equal((await post('/api/schedule/address', {query:'500 S Columbus Drive'}, family.cookie)).status, 403);
+  assert.equal((await post('/api/schedule/outlook', {}, family.cookie)).status, 403);
   assert.equal((await post('/access/issue-invitation', {}, family.cookie)).status, 403);
   assert.deepEqual((await post('/capture', {}, owner.cookie)).data.files, ['capture.jpg']);
   assert.equal((await get('/schedule', owner.cookie)).data.enabled, false);
@@ -297,6 +298,9 @@ test('keeps viewer invitations read-only and admin AI credentials private', { ti
     else if (req.url === '/api/schedule/address' && data.query === '500 S Columbus Drive')
       return res.writeHead(200, { 'Content-Type': 'application/json' })
         .end(JSON.stringify({matches:[{label:'Chicago', latitude:41.87, longitude:-87.62}]}));
+    else if (req.url === '/api/schedule/outlook' && data.location?.latitude === 41.87)
+      return res.writeHead(200, { 'Content-Type': 'application/json' })
+        .end(JSON.stringify({tomorrowSun:{date:'2026-11-29', sunrise:1795957200, sunset:1795989600}}));
     else return res.writeHead(404).end();
     res.end(JSON.stringify({ ok: true }));
   });
@@ -345,6 +349,9 @@ test('keeps viewer invitations read-only and admin AI credentials private', { ti
   const address = await post('/api/schedule/address', {query:'500 S Columbus Drive'}, owner.cookie);
   assert.equal(address.status, 200);
   assert.deepEqual(address.data, {matches:[{label:'Chicago', latitude:41.87, longitude:-87.62}]});
+  const outlook = await post('/api/schedule/outlook', {location:{latitude:41.87, longitude:-87.62}}, owner.cookie);
+  assert.equal(outlook.status, 200);
+  assert.equal(outlook.data.tomorrowSun.date, '2026-11-29');
   const testCapture = await post('/api/schedule/test', {}, owner.cookie);
   assert.equal(testCapture.status, 202);
   assert.deepEqual(testCapture.data, { queued: true });
