@@ -159,7 +159,9 @@ Open the administration menu from the camera controls. Under **Viewer invitation
 
 Under **Scheduled captures**, add a time or select **Edit** beside a saved time, then select **Save schedule**. Select **×** next to a saved time and confirm to delete it. Deleting the last time turns daily captures off. Choose **Use my time zone** to use the browser's time zone. When the schedule is enabled, the countdown shows the Pi timer's next run.
 
-Choose **Sunrise** or **Sunset** to capture at a solar event. Enter the camera coordinates and the number of minutes before or after the event. **Preview next time** calculates the next occurrence without saving or taking a photo. Solar triggers use the schedule's time zone to choose the date. Coordinates stay on the Pi, and calculations work offline. The Pi refreshes the upcoming solar times at boot and daily. A missed capture is skipped if the Pi was off.
+Choose **Sunrise** or **Sunset** to capture at a solar event. Enter the camera coordinates and the number of minutes before or after the event. **Preview next time** calculates the next occurrence without saving or taking a photo. Solar triggers use the schedule's time zone to choose the date, and calculations work offline. The Pi refreshes the upcoming solar times at boot and daily. A missed capture is skipped if the Pi was off.
+
+Save **Camera location** to see tomorrow's sunrise, sunset and weather. The card shows the next scheduled shot and marks it on the arc when it falls during tomorrow's daylight. The forecast request sends coordinates rounded to two decimal places to [Open-Meteo](https://open-meteo.com/). Weather availability does not affect captures.
 
 **Test now** queues one capture through the same job as the timer, using the saved AI settings. Check **Photos on the Pi** for the result. You can test while daily captures are off.
 

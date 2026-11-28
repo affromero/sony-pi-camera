@@ -13,6 +13,18 @@ UNIT = "sony-pi-capture@operator.timer"
 
 
 class ScheduleTest(unittest.TestCase):
+    def test_tomorrow_sun_uses_the_camera_date(self):
+        settings = {
+            "timezone": "America/Chicago",
+            "location": {"latitude": 41.88, "longitude": -87.63},
+        }
+        now = datetime(2026, 11, 28, 1, tzinfo=UTC)
+        self.assertIsNone(schedule.tomorrow_sun({}, now))
+        outlook = schedule.tomorrow_sun(settings, now)
+        assert outlook is not None
+        self.assertEqual(outlook["date"], "2026-11-28")
+        self.assertLess(outlook["sunrise"], outlook["sunset"])
+
     def test_solar_offsets_follow_the_sun_and_skip_unavailable_events(self):
         now = datetime(2026, 11, 27, 12, tzinfo=UTC)
         config = dict(

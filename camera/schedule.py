@@ -252,6 +252,23 @@ def replace(path: Path, content: str) -> None:
             temp.unlink(missing_ok=True)
 
 
+def tomorrow_sun(settings: dict, now: datetime) -> dict | None:
+    if not settings.get("location"):
+        return None
+    zone = ZoneInfo(settings["timezone"])
+    day = now.astimezone(zone).date() + timedelta(days=1)
+    observer = Observer(**settings["location"])
+    result: dict[str, str | int | None] = {"date": day.isoformat()}
+    for event in (sunrise, sunset):
+        try:
+            result[event.__name__] = int(
+                event(observer, day, zone).timestamp()
+            )
+        except ValueError:
+            result[event.__name__] = None
+    return result
+
+
 def schedule_response(unit: str, settings: dict) -> dict:
     next_capture_at = None
     inherits_timezone = False
@@ -263,13 +280,15 @@ def schedule_response(unit: str, settings: dict) -> dict:
             next_capture_at = int(stamp_utc.replace(tzinfo=UTC).timestamp())
     elif not settings.get("solar") and not settings.get("location"):
         _, _, inherits_timezone = daily_times(ctl("cat", unit))
+    now = datetime.now(UTC)
     return {
         **settings,
         "nextCaptureAt": next_capture_at,
         "inheritsTimezone": inherits_timezone,
+        "tomorrowSun": tomorrow_sun(settings, now),
         "solarNext": [
             int(dates[0].timestamp()) if dates else None
-            for dates in solar_occurrences(settings, datetime.now(UTC))
+            for dates in solar_occurrences(settings, now)
         ],
     }
 

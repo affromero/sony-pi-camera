@@ -19,10 +19,13 @@ import time
 from collections.abc import Generator
 from contextlib import contextmanager
 from fractions import Fraction
+from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
-from urllib.parse import unquote, urlsplit
+from urllib.error import URLError
+from urllib.parse import unquote, urlencode, urlsplit
+from urllib.request import urlopen
 
 from PIL import Image, ImageOps
 
@@ -444,6 +447,40 @@ def schedule_request(message: dict) -> dict:
     return response
 
 
+@lru_cache(maxsize=8)
+def tomorrow_forecast(
+    lat: float, lon: float, zone: str, date: str, cache_window: int
+) -> dict | None:
+    fields = (
+        "weather_code",
+        "temperature_2m_min",
+        "temperature_2m_max",
+        "precipitation_probability_max",
+    )
+    query = urlencode(
+        dict(
+            latitude=lat,
+            longitude=lon,
+            timezone=zone,
+            daily=",".join(fields),
+            start_date=date,
+            end_date=date,
+        )
+    )
+    try:
+        with urlopen(
+            "https://api.open-meteo.com/v1/forecast?" + query, timeout=5
+        ) as response:
+            day = json.loads(response.read(32_768))["daily"]
+        index = day["time"].index(date)
+        values = {key: day[key][index] for key in fields}
+        if not all(type(value) in {int, float} for value in values.values()):
+            return None
+        return {"date": date, **values}
+    except (URLError, OSError, ValueError, KeyError, IndexError, TypeError):
+        return None
+
+
 class CameraHTTPServer(ThreadingHTTPServer):
     def __init__(
         self,
@@ -548,6 +585,22 @@ class Handler(BaseHTTPRequestHandler):
                 )
             elif path == "/api/schedule":
                 self.send(schedule_request({"action": "read"}))
+            elif path == "/api/schedule/forecast":
+                settings = schedule_request({"action": "read"})
+                location, day = (
+                    settings.get("location"),
+                    settings.get("tomorrowSun"),
+                )
+                forecast = None
+                if location and day:
+                    forecast = tomorrow_forecast(
+                        round(location["latitude"], 2),
+                        round(location["longitude"], 2),
+                        settings["timezone"],
+                        day["date"],
+                        int(time.time() // 1800),
+                    )
+                self.send({"forecast": forecast})
             elif path == "/api/settings":
                 with camera_read():
                     values = settings_snapshot()

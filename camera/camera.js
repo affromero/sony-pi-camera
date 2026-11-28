@@ -576,6 +576,8 @@ function syncScheduleTrigger() {
   const kind = $('schedule-kind').value;
   $('schedule-time').hidden = kind !== 'fixed';
   $('schedule-solar').hidden = kind !== 'sunrise' && kind !== 'sunset';
+  if (!$('schedule-solar').hidden && !$('schedule-latitude').value)
+    document.querySelector('.schedule-location').open = true;
   $('schedule-solar-preview').textContent = '';
 }
 function schedulePayload(rules, enabled, timezone, location) {
@@ -628,6 +630,77 @@ function scheduleEdited() {
   $('schedule-solar-preview').textContent = '';
   $('schedule-status').textContent = 'Unsaved changes';
 }
+let outlookKey;
+function forecastDescription(code) {
+  if (code === 0) return 'Clear';
+  if (code <= 3) return ['Clear', 'Mostly clear', 'Partly cloudy', 'Overcast'][code];
+  if (code <= 48) return 'Fog';
+  if (code <= 57) return 'Drizzle';
+  if (code <= 67 || (code >= 80 && code <= 82)) return 'Rain';
+  if (code <= 86) return 'Snow';
+  return 'Thunderstorms';
+}
+function showOutlook(schedule) {
+  const card = $('schedule-outlook');
+  const sun = schedule.tomorrowSun;
+  card.hidden = false;
+  const options = {timeZone: schedule.timezone, hour: 'numeric', minute: '2-digit'};
+  const formatTime = new Intl.DateTimeFormat(undefined, options);
+  const formatShot = new Intl.DateTimeFormat(undefined, {
+    ...options, weekday: 'short', month: 'short', day: 'numeric',
+  });
+  const next = schedule.nextCaptureAt;
+  $('outlook-next').textContent = next ? formatShot.format(next * 1000) : 'No capture scheduled';
+  $('outlook-daylight').hidden = !sun;
+  if (!sun) {
+    outlookKey = undefined;
+    $('outlook-source').hidden = true;
+    $('outlook-date').textContent = '';
+    $('outlook-weather').textContent = 'Set the camera location for sunrise, sunset and weather.';
+    return;
+  }
+  $('outlook-date').textContent = new Intl.DateTimeFormat(undefined, {
+    timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric',
+  }).format(new Date(sun.date + 'T12:00:00Z'));
+  $('outlook-sunrise').textContent = sun.sunrise ? formatTime.format(sun.sunrise * 1000) : 'No sunrise';
+  $('outlook-sunset').textContent = sun.sunset ? formatTime.format(sun.sunset * 1000) : 'No sunset';
+  const marker = $('outlook-marker');
+  marker.hidden = !next || !sun.sunrise || !sun.sunset || next < sun.sunrise || next > sun.sunset;
+  if (!marker.hidden) {
+    const position = Math.PI * (next - sun.sunrise) / (sun.sunset - sun.sunrise);
+    marker.style.left = 50 * (1 - Math.cos(position)) + '%';
+    marker.style.top = 100 * (1 - Math.sin(position)) + '%';
+  }
+  const key = JSON.stringify([schedule.location, schedule.timezone, sun.date, Math.floor(Date.now() / 1800000)]);
+  if (key === outlookKey) return;
+  outlookKey = key;
+  $('outlook-source').hidden = true;
+  $('outlook-weather').textContent = 'Loading forecast…';
+  void loadForecast(key, sun.date);
+}
+async function loadForecast(key, date) {
+  let forecast;
+  try {
+    forecast = (await (await api('/api/schedule/forecast')).json()).forecast;
+  } catch {
+    // Keep the offline solar preview visible if weather cannot load.
+  }
+  if (key !== outlookKey) return;
+  if (forecast?.date !== date) {
+    $('outlook-weather').textContent = 'Weather forecast unavailable.';
+    return;
+  }
+  const temp = new Intl.NumberFormat(undefined, {
+    style: 'unit', unit: 'celsius', unitDisplay: 'narrow', maximumFractionDigits: 0,
+  });
+  $('outlook-weather').textContent = [
+    forecastDescription(forecast.weather_code),
+    temp.format(forecast.temperature_2m_min) + ' to ' + temp.format(forecast.temperature_2m_max),
+    'Up to ' + Math.round(forecast.precipitation_probability_max) + '% precipitation',
+  ].join(' · ');
+  $('outlook-source').hidden = false;
+}
+
 let nextCaptureAt = null;
 let countdownTimer;
 let savedSchedule;
@@ -650,6 +723,7 @@ async function tickSchedule() {
       const response = await api('/api/schedule');
       const schedule = await response.json();
       nextCaptureAt = schedule.nextCaptureAt ?? null;
+      showOutlook(schedule);
       if (!scheduleDirty && editingTime === undefined && savedSchedule) {
         savedSchedule = schedule;
         $('schedule-times').replaceChildren(...scheduleRules(schedule).map(scheduleRow));
@@ -681,6 +755,7 @@ function showSchedule(schedule) {
     ? 'Daily captures are on (' + schedule.timezone + ').'
     : rules.length ? 'Daily captures are off.' : 'No daily captures scheduled.';
   nextCaptureAt = schedule.nextCaptureAt ?? null;
+  showOutlook(schedule);
   void tickSchedule();
 }
 let scheduleLoaded = false;
@@ -703,7 +778,10 @@ async function loadSchedule() {
   }
 }
 $('capture-schedule').ontoggle = () => {
-  if ($('capture-schedule').open) loadSchedule();
+  if ($('capture-schedule').open) {
+    loadSchedule();
+    if (savedSchedule) showOutlook(savedSchedule);
+  }
   void tickSchedule();
 };
 document.addEventListener('visibilitychange', tickSchedule);
@@ -754,7 +832,9 @@ $('schedule-form').onsubmit = event => {
     const rules = scheduleRules(savedSchedule).filter(rule => rule !== editingTime);
     if (draft !== null) rules.push(draft);
     if (enabled && !rules.length) throw new Error('Choose a capture trigger.');
-    const location = draft && typeof draft !== 'string' ? solarLocation() : savedSchedule.location;
+    const needsLocation = rules.some(rule => typeof rule !== 'string') ||
+      $('schedule-latitude').value !== '' || $('schedule-longitude').value !== '';
+    const location = needsLocation ? solarLocation() : undefined;
     void saveSchedule(schedulePayload(rules, enabled, $('schedule-zone').value.trim(), location), 'Saving schedule…');
   } catch (error) {
     $('schedule-status').textContent = error.message;

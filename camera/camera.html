@@ -27,6 +27,12 @@
 <input id="schedule-zone" list="schedule-zones" required placeholder="America/Chicago">
 <button class="secondary" type="button" id="schedule-local-zone" hidden>Use my time zone</button></div>
 <datalist id="schedule-zones"></datalist>
+<details class="schedule-location">
+<summary>Camera location</summary>
+<div class="schedule-zone"><label for="schedule-latitude">Latitude</label><input id="schedule-latitude" type="number" min="-90" max="90" step="any">
+<label for="schedule-longitude">Longitude</label><input id="schedule-longitude" type="number" min="-180" max="180" step="any"></div>
+<p>Weather uses rounded coordinates.</p>
+</details>
 <div class="schedule-zone"><label for="schedule-kind" id="schedule-time-label">Add a capture</label>
 <select id="schedule-kind"><option value="">Choose trigger</option><option value="fixed">Fixed time</option>
 <option value="sunrise">Sunrise</option><option value="sunset">Sunset</option></select>
@@ -34,8 +40,6 @@
 <div id="schedule-solar" hidden>
 <div class="schedule-time"><label for="schedule-offset">Offset</label><input id="schedule-offset" type="number" min="0" max="720" value="0">
 <select id="schedule-offset-direction" aria-label="Minutes before or after"><option value="1">minutes after</option><option value="-1">minutes before</option></select></div>
-<div class="schedule-zone"><label for="schedule-latitude">Camera latitude</label><input id="schedule-latitude" type="number" min="-90" max="90" step="any">
-<label for="schedule-longitude">Camera longitude</label><input id="schedule-longitude" type="number" min="-180" max="180" step="any"></div>
 <button class="secondary" type="button" id="schedule-preview">Preview next time</button>
 <p id="schedule-solar-preview" role="status"></p>
 </div></div>
@@ -50,6 +54,14 @@
 </section>
 </fieldset></form><p role="status" id="schedule-status"></p>
 <p id="schedule-next" hidden></p>
+<section id="schedule-outlook" class="schedule-outlook" aria-labelledby="schedule-outlook-title" hidden>
+<header class="outlook-heading"><h3 id="schedule-outlook-title">Tomorrow</h3><span id="outlook-date"></span></header>
+<div id="outlook-daylight"><div class="outlook-path" aria-hidden="true"><div class="outlook-arc"></div><span id="outlook-marker" hidden></span></div>
+<div class="outlook-sun"><div>Sunrise<strong id="outlook-sunrise"></strong></div><div>Sunset<strong id="outlook-sunset"></strong></div></div></div>
+<div class="outlook-shot"><span>Next scheduled shot</span><strong id="outlook-next"></strong></div>
+<p id="outlook-weather" class="outlook-weather" role="status"></p>
+<a id="outlook-source" href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer" hidden>Open-Meteo forecast</a>
+</section>
 <button class="secondary" id="schedule-retry" hidden>Retry loading schedule</button></details>
 <section class="library"><h2>Photos on the Pi</h2>
 <div class="gallery-filters">

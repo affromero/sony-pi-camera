@@ -36,6 +36,19 @@ dialog{border:0;padding:0;border-radius:14px;width:min(1100px,calc(100vw - 32px)
 #schedule-times time{font-weight:650;font-variant-numeric:tabular-nums}
 #schedule-times small{display:block;color:#616168;font-size:.78rem;margin-top:.2rem}
 #schedule-solar:not([hidden]){display:grid;gap:.5rem}
+.schedule-location{width:100%}
+.schedule-outlook{margin-top:1rem;padding:1rem;border-radius:1rem;background:#f1f5f9;color:#243447}
+.outlook-heading{height:auto;padding:0;border:0;gap:.5rem}
+.outlook-heading h3,.outlook-weather{margin:0}
+#outlook-date,.outlook-sun,.outlook-shot span{font-size:.82rem;color:#4b5969}
+.outlook-path{position:relative;margin:1rem auto 0;width:min(85%,17rem);aspect-ratio:2/1;border-bottom:1px solid #aab9c8}
+.outlook-arc{position:absolute;inset:0;border:3px solid #c3d1df;border-bottom:0;border-radius:50% 50% 0 0 / 100% 100% 0 0}
+#outlook-marker{position:absolute;width:.9rem;height:.9rem;transform:translate(-50%,-50%);border:2px solid #fff;border-radius:50%;background:#2365cb;box-shadow:0 0 0 1px #2365cb}
+.outlook-sun{display:flex;justify-content:space-between;gap:.75rem;margin:.4rem 0 .8rem}
+.outlook-sun div:last-child{text-align:right}
+.outlook-sun strong,.outlook-shot strong{display:block;font-size:1rem;color:#17273a;font-variant-numeric:tabular-nums}
+.outlook-shot,.outlook-weather{padding:.6rem 0;border-top:1px solid #d5dfeb}
+#outlook-source{font-size:.75rem;color:#405773;text-underline-offset:.15em}
 .schedule #schedule-offset{width:5rem}
 #schedule-times .schedule-remove{color:#a12420;min-width:2.5rem;font-size:1.15rem}
 #camera-controls{border:0;padding:0;margin:0;min-width:0}
