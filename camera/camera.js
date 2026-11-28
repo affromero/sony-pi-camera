@@ -688,6 +688,7 @@ async function loadForecast(key, date) {
   }
   if (key !== outlookKey) return;
   if (forecast?.date !== date) {
+    outlookKey = undefined;
     $('outlook-weather').textContent = 'Weather forecast unavailable.';
     return;
   }

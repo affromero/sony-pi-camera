@@ -20,10 +20,10 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from fractions import Fraction
 from functools import lru_cache
+from http.client import HTTPException
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
-from urllib.error import URLError
 from urllib.parse import unquote, urlencode, urlsplit
 from urllib.request import urlopen
 
@@ -448,9 +448,9 @@ def schedule_request(message: dict) -> dict:
 
 
 @lru_cache(maxsize=8)
-def tomorrow_forecast(
+def fetch_tomorrow_forecast(
     lat: float, lon: float, zone: str, date: str, cache_window: int
-) -> dict | None:
+) -> dict:
     fields = (
         "weather_code",
         "temperature_2m_min",
@@ -467,17 +467,30 @@ def tomorrow_forecast(
             end_date=date,
         )
     )
+    with urlopen(
+        "https://api.open-meteo.com/v1/forecast?" + query, timeout=5
+    ) as response:
+        day = json.loads(response.read(32_768))["daily"]
+    index = day["time"].index(date)
+    values = {key: day[key][index] for key in fields}
+    if not all(type(value) in {int, float} for value in values.values()):
+        raise ValueError("Incomplete forecast.")
+    return {"date": date, **values}
+
+
+def tomorrow_forecast(
+    lat: float, lon: float, zone: str, date: str, cache_window: int
+) -> dict | None:
     try:
-        with urlopen(
-            "https://api.open-meteo.com/v1/forecast?" + query, timeout=5
-        ) as response:
-            day = json.loads(response.read(32_768))["daily"]
-        index = day["time"].index(date)
-        values = {key: day[key][index] for key in fields}
-        if not all(type(value) in {int, float} for value in values.values()):
-            return None
-        return {"date": date, **values}
-    except (URLError, OSError, ValueError, KeyError, IndexError, TypeError):
+        return fetch_tomorrow_forecast(lat, lon, zone, date, cache_window)
+    except (
+        HTTPException,
+        OSError,
+        ValueError,
+        KeyError,
+        IndexError,
+        TypeError,
+    ):
         return None
 
 
