@@ -460,9 +460,11 @@ async function settings() {
           });
         });
         wrapper.append(select, feedback); $('settings').append(wrapper);
-        if (name === 'sensorcrop') {
+        if (name === 'sensorcrop' || name === 'focusmode') {
           const hint = document.createElement('small');
-          hint.textContent = 'Set on camera under APS-C/Super 35mm. The 35mm prime has a fixed focal length.';
+          hint.textContent = name === 'focusmode'
+            ? 'On the camera, set Pre-AF to Off to keep the lens still during preview.'
+            : 'Set on camera under APS-C/Super 35mm. The 35mm prime has a fixed focal length.';
           wrapper.append(hint);
         }
       }

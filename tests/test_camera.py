@@ -98,6 +98,27 @@ class ApertureTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 camera.focus_at(1.1, 0)
 
+    def test_shutter_failure_restores_autofocus_mode(self):
+        mode = "Automatic"
+
+        def read_mode(_name):
+            return {"current": mode}
+
+        def write_mode(_name, selected):
+            nonlocal mode
+            mode = selected
+            return mode
+
+        with (
+            mock.patch.object(camera, "setting", side_effect=read_mode),
+            mock.patch.object(camera, "set_setting", side_effect=write_mode),
+            self.assertRaisesRegex(RuntimeError, "Shutter failed"),
+            camera.preserve_shutter_focus(),
+        ):
+            self.assertEqual(mode, "Manual")
+            raise RuntimeError("Shutter failed")
+        self.assertEqual(mode, "Automatic")
+
     def test_still_exposure_choices_respect_body_and_mode(self):
         iso = ["Auto ISO", "25", "50", "64", "204800", "409600"]
         speeds = ["30", "32/10", "1/8000", "1/32000", "Bulb"]
@@ -179,13 +200,25 @@ class CameraTest(unittest.TestCase):
             "printf 'END\\n'; shift 2; done; "
             'elif [ "$2" = "imagequality" ]; then '
             'printf "Current: %s\\n" "$(cat "$HOME/quality")"; '
+            'elif [ "$2" = "focusmode" ]; then '
+            'printf "Current: %s\\n" "$(cat "$HOME/focus-mode")"; '
             'else cat "$HOME/viewport"; fi;;\n'
+            "--update-setting) "
+            "printf 'Current: M\\nEND\\n'; "
+            'printf "Current: %s\\nReadonly: 0\\n" '
+            '"$(cat "$HOME/focus-mode")"; '
+            "printf 'Choice: 0 Manual\\nChoice: 1 Automatic\\nEND\\n'; "
+            'if [ "$(dd bs=1 count=1 2>/dev/null)" = Y ]; then '
+            'printf "%s\\n" "$3" > "$HOME/focus-mode"; '
+            'printf "%s\\n" "$3"; fi;;\n'
             '--keep) touch "$HOME/shutter"; out="${4%.%C}"; '
+            'cat "$HOME/focus-mode" > "$HOME/focus-at-shutter"; '
             'while [ -e "$HOME/hold-shutter" ]; do sleep 0.02; done; '
             'cp "$HOME/original.jpg" "$out.jpg";;\n'
             "*) exit 1;;\nesac\n"
         )
         fake_camera.chmod(0o700)
+        (cls.home / "focus-mode").write_text("Automatic\n")
         env["PI_CAMERA_BACKEND_BINARY"] = str(fake_camera)
         cls.process = subprocess.Popen([sys.executable, str(SERVER)], env=env)
         token_file = cls.home / ".config/sony-pi-camera/camera-token"
@@ -383,6 +416,12 @@ class CameraTest(unittest.TestCase):
         ) as response:
             (name,) = json.load(response)["files"]
         self.addCleanup((self.home / "camera-photos" / name).unlink)
+        self.assertEqual(
+            (self.home / "focus-at-shutter").read_text().strip(), "Manual"
+        )
+        self.assertEqual(
+            (self.home / "focus-mode").read_text().strip(), "Automatic"
+        )
         for prefix in ("/api/photos/", "/api/thumbnail/"):
             with self.request(prefix + name, self.token) as response:
                 with Image.open(io.BytesIO(response.read())) as saved:
@@ -472,6 +511,9 @@ class CameraTest(unittest.TestCase):
             timeout=10,
         )
         name = job.stdout.strip().removeprefix("Saved ")
+        self.assertEqual(
+            (self.home / "focus-at-shutter").read_text().strip(), "Automatic"
+        )
         saved = self.home / "camera-photos" / name
         self.addCleanup(saved.unlink)
         with self.request("/api/photos", self.token) as response:

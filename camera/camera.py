@@ -18,7 +18,7 @@ import tempfile
 import threading
 import time
 from collections.abc import Generator
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from fractions import Fraction
 from functools import lru_cache
 from http.client import HTTPException
@@ -390,6 +390,19 @@ def save_framed_jpeg(source: Path, target: Path, state: dict) -> None:
         )
 
 
+@contextmanager
+def preserve_shutter_focus() -> Generator[None, None, None]:
+    mode = setting("focusmode")["current"]
+    if mode == "Manual":
+        yield
+        return
+    try:
+        set_setting("focusmode", "Manual")
+        yield
+    finally:
+        set_setting("focusmode", mode)
+
+
 def capture_photo(
     expected: dict | None, *, scheduled: bool = False
 ) -> list[str]:
@@ -411,13 +424,18 @@ def capture_photo(
         name += "-scheduled"
     with tempfile.TemporaryDirectory(prefix=".capture-", dir=PHOTOS) as tmp:
         directory = Path(tmp)
-        output = command(
-            "--keep",
-            "--capture-image-and-download",
-            "--filename",
-            str(directory / (name + ".%C")),
-            cwd=directory,
-        )
+        # The Sony capture command half-presses the shutter before exposure.
+        # For a shot from live view, keep the focus the operator chose.
+        with (
+            preserve_shutter_focus() if expected is not None else nullcontext()
+        ):
+            output = command(
+                "--keep",
+                "--capture-image-and-download",
+                "--filename",
+                str(directory / (name + ".%C")),
+                cwd=directory,
+            )
         files = sorted(directory.glob(name + ".*"))
         if not files:
             raise RuntimeError(
