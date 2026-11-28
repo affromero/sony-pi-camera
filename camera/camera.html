@@ -31,9 +31,20 @@
 <summary>Camera location</summary>
 <button class="secondary" type="button" id="schedule-use-location" title="Ask this device for its precise location">Use my location</button>
 <p id="schedule-location-status" role="status"></p>
+<div class="schedule-zone"><label for="schedule-address">Search for an address</label>
+<input id="schedule-address" type="search" maxlength="160" autocomplete="off" placeholder="Street address and city">
+<ul id="schedule-address-results" class="schedule-address-results" aria-label="Suggested addresses" hidden></ul>
+<p id="schedule-address-status" role="status"></p></div>
+<details id="schedule-globe-picker">
+<summary>Pick on the globe</summary>
+<p>Drag to rotate, zoom in, then click or tap to drop a pin.</p>
+<div id="schedule-globe" aria-label="Camera location globe"></div>
+<button class="secondary" type="button" id="schedule-globe-center" disabled>Drop pin at map center</button>
+<p id="schedule-globe-status" role="status"></p>
+</details>
 <div class="schedule-zone"><label for="schedule-latitude">Latitude</label><input id="schedule-latitude" type="number" min="-90" max="90" step="any">
 <label for="schedule-longitude">Longitude</label><input id="schedule-longitude" type="number" min="-180" max="180" step="any"></div>
-<p>Use this device’s location when you’re near the camera. Weather uses rounded coordinates.</p>
+<p>Use this device’s location when you’re near the camera. Address search uses <a href="https://photon.komoot.io/" target="_blank" rel="noopener noreferrer">Photon</a> and <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a>. Weather uses rounded coordinates.</p>
 </details>
 <div class="schedule-zone"><label for="schedule-kind" id="schedule-time-label">Add a capture</label>
 <select id="schedule-kind"><option value="">Choose trigger</option><option value="fixed">Fixed time</option>

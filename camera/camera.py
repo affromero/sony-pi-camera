@@ -25,7 +25,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 from urllib.parse import unquote, urlencode, urlsplit
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 from PIL import Image, ImageOps
 
@@ -495,6 +495,69 @@ def tomorrow_forecast(
         return None
 
 
+def address_matches(data: object) -> list[dict]:
+    query = data.get("query") if isinstance(data, dict) else None
+    if not isinstance(query, str) or not 5 <= len(query.strip()) <= 160:
+        raise ValueError("Enter an address of 5 to 160 characters.")
+    url = "https://photon.komoot.io/api/?" + urlencode(
+        {"q": query.strip(), "limit": 5}
+    )
+    try:
+        request = Request(
+            url,
+            headers={
+                "User-Agent": "SonyPiCamera (https://github.com/affromero/sony-pi-camera)"
+            },
+        )
+        with urlopen(request, timeout=5) as response:
+            features = json.loads(response.read(64_000))["features"]
+        matches = []
+        for item in features[:5]:
+            lon, lat = item["geometry"]["coordinates"][:2]
+            if not (
+                type(lat) in {float, int}
+                and type(lon) in {float, int}
+                and -90 <= lat <= 90
+                and -180 <= lon <= 180
+            ):
+                continue
+            props = item["properties"]
+            street = " ".join(
+                str(props.get(key, "")) for key in ("housenumber", "street")
+            ).strip()
+            parts = [
+                props.get("name"),
+                street,
+                props.get("city"),
+                props.get("state"),
+                props.get("postcode"),
+                props.get("country"),
+            ]
+            label = ", ".join(
+                dict.fromkeys(
+                    value
+                    for value in parts
+                    if isinstance(value, str) and value
+                )
+            )
+            if label:
+                matches.append(
+                    {"label": label, "latitude": lat, "longitude": lon}
+                )
+        return matches
+    except (
+        HTTPException,
+        OSError,
+        ValueError,
+        KeyError,
+        IndexError,
+        TypeError,
+    ):
+        raise RuntimeError(
+            "Address search is unavailable. Try again."
+        ) from None
+
+
 class CameraHTTPServer(ThreadingHTTPServer):
     def __init__(
         self,
@@ -528,9 +591,18 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header(
             "Content-Security-Policy",
-            "default-src 'self'; img-src 'self' blob:; "
-            "frame-ancestors 'none'; base-uri 'none'",
+            "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; "
+            + (
+                "img-src 'self' blob: data:; worker-src blob:; "
+                "connect-src 'self' https://tile.openstreetmap.org; "
+                "script-src 'self' https://cdn.jsdelivr.net; "
+                "style-src 'self' https://cdn.jsdelivr.net"
+                if content_type == "text/html"
+                else "img-src 'self' blob:"
+            ),
         )
+        if content_type == "text/html":
+            self.send_header("Referrer-Policy", "strict-origin")
         self.end_headers()
         if stream:
             try:
@@ -696,6 +768,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send(schedule_request({"action": "test"}), status=202)
             elif path == "/api/schedule/preview":
                 self.send(schedule_request({"preview": data}))
+            elif path == "/api/schedule/address":
+                self.send({"matches": address_matches(data)})
             elif path == "/api/capture":
                 with camera_control():
                     files = capture_photo(data.get("viewport"))

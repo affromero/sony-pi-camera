@@ -145,6 +145,7 @@ test('serves admins and read-only invitees on the same hostname', { timeout: 800
   assert.equal((await get('/controls', family.cookie)).status, 403);
   assert.equal((await post('/capture', {}, family.cookie)).status, 403);
   assert.equal((await post('/api/schedule/test', {}, family.cookie)).status, 403);
+  assert.equal((await post('/api/schedule/address', {query:'500 S Columbus Drive'}, family.cookie)).status, 403);
   assert.equal((await post('/access/issue-invitation', {}, family.cookie)).status, 403);
   assert.deepEqual((await post('/capture', {}, owner.cookie)).data.files, ['capture.jpg']);
   assert.equal((await get('/schedule', owner.cookie)).data.enabled, false);
@@ -293,6 +294,9 @@ test('keeps viewer invitations read-only and admin AI credentials private', { ti
     else if (req.url === '/api/delete' && data.name === 'nonempty/a %.raw') deleted = true;
     else if (req.url === '/api/schedule/test')
       return res.writeHead(202, { 'Content-Type': 'application/json' }).end('{"queued":true}');
+    else if (req.url === '/api/schedule/address' && data.query === '500 S Columbus Drive')
+      return res.writeHead(200, { 'Content-Type': 'application/json' })
+        .end(JSON.stringify({matches:[{label:'Chicago', latitude:41.87, longitude:-87.62}]}));
     else return res.writeHead(404).end();
     res.end(JSON.stringify({ ok: true }));
   });
@@ -338,6 +342,9 @@ test('keeps viewer invitations read-only and admin AI credentials private', { ti
   assert.match(controls.data.toString(), /popovertarget="admin-menu"/);
   assert.match(controls.data.toString(), /id="admin-menu" popover/);
   assert.equal((await post('/api/schedule/test', {})).status, 401);
+  const address = await post('/api/schedule/address', {query:'500 S Columbus Drive'}, owner.cookie);
+  assert.equal(address.status, 200);
+  assert.deepEqual(address.data, {matches:[{label:'Chicago', latitude:41.87, longitude:-87.62}]});
   const testCapture = await post('/api/schedule/test', {}, owner.cookie);
   assert.equal(testCapture.status, 202);
   assert.deepEqual(testCapture.data, { queued: true });

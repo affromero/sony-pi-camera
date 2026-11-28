@@ -62,7 +62,7 @@ const controlRoutes = new Set([
   'GET /api/photos', 'GET /api/photos?details=1',
   'POST /api/capture', 'POST /api/setting', 'POST /api/focus',
   'POST /api/magnifier', 'POST /api/schedule', 'POST /api/schedule/test', 'POST /api/delete',
-  'POST /api/schedule/preview',
+  'POST /api/schedule/preview', 'POST /api/schedule/address',
 ]);
 
 function send(response, status, value, type) {
@@ -359,6 +359,11 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
       const [file, type] = controlAssets.get(path);
       let content = await readFile(new URL('../../' + file, import.meta.url), 'utf8');
       if (path === '/controls') {
+        response.setHeader('Referrer-Policy', 'strict-origin');
+        response.setHeader('Content-Security-Policy',
+          "default-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; " +
+          "img-src 'self' blob: data:; worker-src blob:; connect-src 'self' https://tile.openstreetmap.org; " +
+          "script-src 'self' https://cdn.jsdelivr.net; style-src 'self' https://cdn.jsdelivr.net");
         const menu = await readFile(new URL('admin-menu.html', import.meta.url), 'utf8');
         content = content.replace('<body>', '<body data-sidedoor>')
           .replace('</head>', '<link rel="stylesheet" href="/admin.css"><script type="module" src="/admin.js"></script></head>')

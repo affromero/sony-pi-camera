@@ -37,6 +37,14 @@ dialog{border:0;padding:0;border-radius:14px;width:min(1100px,calc(100vw - 32px)
 #schedule-times small{display:block;color:#616168;font-size:.78rem;margin-top:.2rem}
 #schedule-solar:not([hidden]){display:grid;gap:.5rem}
 .schedule-location{width:100%}
+.schedule-address-results{padding:0;margin:0;list-style:none}
+.schedule-address-results li+li{margin-top:.3rem}
+.schedule-address-results button{display:block;width:100%;text-align:left;overflow-wrap:anywhere}
+#schedule-globe{height:clamp(240px,45vh,420px);border-radius:12px;overflow:hidden;background:#dce7ed}
+#schedule-globe .maplibregl-canvas{cursor:crosshair}
+#schedule-globe-picker{margin-block:.6rem}
+#schedule-globe-center{margin-top:.5rem}
+.schedule-globe-pin{width:18px;height:18px;border:3px solid white;border-radius:50%;background:#2164db;box-shadow:0 1px 5px #0008;pointer-events:none}
 .schedule-outlook{margin-top:1rem;padding:1rem;border-radius:1rem;background:#f1f5f9;color:#243447}
 .outlook-heading{height:auto;padding:0;border:0;gap:.5rem}
 .outlook-heading h3,.outlook-weather{margin:0}

@@ -184,7 +184,7 @@ async function api(path, options = {}) {
   }
   return response;
 }
-async function post(path, value) { return api(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(value)}); }
+async function post(path, value, signal) { return api(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(value), signal}); }
 function schedulePreview(delay = previewDelay) {
   clearTimeout(previewTimer);
   if (!connected() || document.hidden || operation || pendingPreview) return;
@@ -595,11 +595,164 @@ function solarLocation() {
     throw new Error('Enter the camera latitude and longitude.');
   return {latitude, longitude};
 }
+const addressInput = $('schedule-address');
+const addressResults = $('schedule-address-results');
+const addressStatus = $('schedule-address-status');
+let addressRequest;
+let addressDelay;
+let locationMap;
+let locationMarker;
+
+function placeLocationMarker(latitude, longitude) {
+  if (locationMarker) locationMarker.setLngLat([longitude, latitude]).addTo(locationMap);
+}
+function fillCameraLocation(latitude, longitude, centerMap = true) {
+  $('schedule-latitude').value = latitude;
+  $('schedule-longitude').value = longitude;
+  placeLocationMarker(latitude, longitude);
+  if (centerMap && locationMap) locationMap.jumpTo({center:[longitude, latitude], zoom:14});
+  $('schedule-location-status').textContent = 'Location selected. Save the schedule to apply it.';
+  scheduleEdited();
+}
+addressInput.oninput = () => {
+  clearTimeout(addressDelay);
+  addressRequest?.abort();
+  addressResults.replaceChildren();
+  addressResults.hidden = true;
+  const query = addressInput.value.trim();
+  addressStatus.textContent = query && query.length < 5 ? 'Enter at least five characters.' : '';
+  if (query.length < 5) return;
+  addressDelay = setTimeout(async () => {
+    const request = new AbortController();
+    addressRequest = request;
+    addressStatus.textContent = 'Looking up addresses…';
+    try {
+      const response = await post('/api/schedule/address', {query}, request.signal);
+      const {matches} = await response.json();
+      if (request.signal.aborted) return;
+      for (const match of matches) {
+        const row = document.createElement('li');
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'secondary';
+        button.textContent = match.label;
+        button.onclick = () => {
+          addressInput.value = match.label;
+          addressResults.hidden = true;
+          addressStatus.textContent = '';
+          fillCameraLocation(match.latitude, match.longitude);
+          addressInput.focus();
+        };
+        row.append(button);
+        addressResults.append(row);
+      }
+      addressResults.hidden = matches.length === 0;
+      addressStatus.textContent = matches.length ? '' : 'No matching addresses. Try adding a city or postal code.';
+    } catch (error) {
+      if (!request.signal.aborted) addressStatus.textContent = error.message;
+    }
+  }, 450);
+};
+addressInput.onkeydown = event => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    if (!addressResults.hidden) addressResults.querySelector('button')?.focus();
+  }
+  if (event.key === 'Escape') {
+    clearTimeout(addressDelay);
+    addressRequest?.abort();
+    addressResults.hidden = true;
+    addressStatus.textContent = '';
+  }
+};
+const globePicker = $('schedule-globe-picker');
+const globeStatus = $('schedule-globe-status');
+const globeCenter = $('schedule-globe-center');
+let globeLoading = false;
+
+function loadGlobeAsset(element, extension, integrity) {
+  const asset = document.createElement(element);
+  const url = 'https://cdn.jsdelivr.net/npm/maplibre-gl@5.16.0/dist/maplibre-gl.' + extension;
+  asset.crossOrigin = 'anonymous';
+  asset.integrity = 'sha384-' + integrity;
+  if (element === 'script') asset.src = url;
+  else {
+    asset.rel = 'stylesheet';
+    asset.href = url;
+  }
+  return new Promise((resolve, reject) => {
+    asset.onload = resolve;
+    asset.onerror = () => { asset.remove(); reject(new Error('Map assets are unavailable.')); };
+    document.head.append(asset);
+  });
+}
+function chooseGlobeLocation({lat, lng}) {
+  const longitude = ((lng + 180) % 360 + 360) % 360 - 180;
+  fillCameraLocation(Number(lat.toFixed(6)), Number(longitude.toFixed(6)), false);
+  globeStatus.textContent = 'Pin placed. Save the schedule to apply it.';
+}
+globePicker.ontoggle = async () => {
+  if (!globePicker.open) return;
+  if (locationMap) {
+    locationMap.resize();
+    return;
+  }
+  if (globeLoading) return;
+  globeLoading = true;
+  globeStatus.textContent = 'Loading the globe…';
+  try {
+    await Promise.all([
+      loadGlobeAsset('link', 'css', 'mnM9NG1099tBMNxdDQNDKIxYcn/fmqQXFJvbT5l1MsrWvzfxBEffceBsw75/cW2R'),
+      loadGlobeAsset('script', 'js', '5uuCMpJARJvc0qchRj0Pde4DdOKngxlNuLm0fOVAnr3Pa7WpHN9/fnrwZVXomOGe'),
+    ]);
+    const latitude = $('schedule-latitude').valueAsNumber;
+    const longitude = $('schedule-longitude').valueAsNumber;
+    const hasLocation = Number.isFinite(latitude) && Math.abs(latitude) <= 90 &&
+      Number.isFinite(longitude) && Math.abs(longitude) <= 180;
+    const maplibre = window.maplibregl;
+    locationMap = new maplibre.Map({
+      container: 'schedule-globe',
+      center: hasLocation ? [longitude, latitude] : [0, 15],
+      zoom: hasLocation ? 12 : 0,
+      maxZoom: 19,
+      scrollZoom: false,
+      dragRotate: false,
+      hash: false,
+      attributionControl: {compact:false},
+      style: {
+        version: 8,
+        projection: {type: 'globe'},
+        sources: {streets: {
+          type: 'raster', tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+          tileSize: 256, maxzoom: 19,
+          attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        }},
+        layers: [{id: 'streets', type: 'raster', source: 'streets'}],
+      },
+    });
+    locationMap.addControl(new maplibre.NavigationControl({showCompass:false}), 'top-left');
+    // A custom element keeps marker assets inside the page's image policy.
+    const pin = document.createElement('span');
+    pin.className = 'schedule-globe-pin';
+    locationMarker = new maplibre.Marker({element:pin});
+    if (hasLocation) placeLocationMarker(latitude, longitude);
+    locationMap.on('click', event => chooseGlobeLocation(event.lngLat));
+    locationMap.on('error', () => { globeStatus.textContent = 'Some map tiles could not load.'; });
+    globeCenter.disabled = false;
+    globeStatus.textContent = '';
+  } catch {
+    globeStatus.textContent = 'The globe could not load. Search for an address or enter coordinates.';
+  } finally {
+    globeLoading = false;
+  }
+};
+globeCenter.onclick = () => chooseGlobeLocation(locationMap.getCenter());
+
 $('schedule-use-location').onclick = () => {
   const button = $('schedule-use-location');
   const status = $('schedule-location-status');
   if (!window.isSecureContext || !navigator.geolocation) {
-    status.textContent = 'Open the HTTPS camera page to use your location, or enter coordinates below.';
+    status.textContent = 'Device location requires HTTPS. Search for an address or use the globe below.';
     return;
   }
   const latitude = $('schedule-latitude');
@@ -613,15 +766,12 @@ $('schedule-use-location').onclick = () => {
       status.textContent = 'Your entered coordinates were kept.';
       return;
     }
-    latitude.value = coords.latitude;
-    longitude.value = coords.longitude;
-    status.textContent = 'Location filled in. Save the schedule to apply it.';
-    scheduleEdited();
+    fillCameraLocation(coords.latitude, coords.longitude);
   }, error => {
     button.disabled = false;
     status.textContent = error.code === 1
-      ? 'Location permission was denied. Allow access in your browser settings or enter coordinates below.'
-      : 'Your location could not be found. Try again or enter coordinates below.';
+      ? 'Location permission was denied. Search for an address or use the globe below.'
+      : 'Your location could not be found. Search for an address or use the globe below.';
   }, {enableHighAccuracy: true, maximumAge: 0, timeout: 15000});
 };
 function draftRule() {
@@ -775,6 +925,8 @@ function showSchedule(schedule) {
   $('schedule-offset-direction').value = '1';
   $('schedule-latitude').value = schedule.location?.latitude ?? '';
   $('schedule-longitude').value = schedule.location?.longitude ?? '';
+  if (schedule.location) placeLocationMarker(schedule.location.latitude, schedule.location.longitude);
+  else locationMarker?.remove();
   $('schedule-time-label').textContent = 'Add a capture';
   syncScheduleTrigger();
   const rules = scheduleRules(schedule);
@@ -817,7 +969,9 @@ $('capture-schedule').ontoggle = () => {
 };
 document.addEventListener('visibilitychange', tickSchedule);
 $('schedule-retry').onclick = loadSchedule;
-$('schedule-form').oninput = scheduleEdited;
+$('schedule-form').oninput = event => {
+  if (event.target !== addressInput) scheduleEdited();
+};
 $('schedule-test').onclick = async () => {
   const button = $('schedule-test');
   button.disabled = true;
