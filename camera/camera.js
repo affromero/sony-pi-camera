@@ -665,7 +665,8 @@ function showOutlook(schedule) {
   $('outlook-sunrise').textContent = sun.sunrise ? formatTime.format(sun.sunrise * 1000) : 'No sunrise';
   $('outlook-sunset').textContent = sun.sunset ? formatTime.format(sun.sunset * 1000) : 'No sunset';
   const marker = $('outlook-marker');
-  marker.hidden = !next || !sun.sunrise || !sun.sunset || next < sun.sunrise || next > sun.sunset;
+  marker.hidden = !next || !sun.sunrise || !sun.sunset || sun.sunset <= sun.sunrise ||
+    next < sun.sunrise || next > sun.sunset;
   if (!marker.hidden) {
     const position = Math.PI * (next - sun.sunrise) / (sun.sunset - sun.sunrise);
     marker.style.left = 50 * (1 - Math.cos(position)) + '%';
@@ -696,7 +697,7 @@ async function loadForecast(key, date) {
   $('outlook-weather').textContent = [
     forecastDescription(forecast.weather_code),
     temp.format(forecast.temperature_2m_min) + ' to ' + temp.format(forecast.temperature_2m_max),
-    'Up to ' + Math.round(forecast.precipitation_probability_max) + '% precipitation',
+    'Peak precipitation chance ' + Math.round(forecast.precipitation_probability_max) + '%',
   ].join(' · ');
   $('outlook-source').hidden = false;
 }
