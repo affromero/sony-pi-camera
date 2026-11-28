@@ -610,8 +610,8 @@ function scheduleRow(rule) {
     const consequence = remaining.length ? '' : ' This turns off daily captures.';
     const discard = scheduleDirty ? ' Unsaved changes will be discarded.' : '';
     if (!confirm('Delete the ' + label + ' capture?' + consequence + discard)) return;
-    const { enabled, timezone, location } = savedSchedule;
-    void saveSchedule(schedulePayload(remaining, enabled && remaining.length > 0, timezone, location),
+    const { timezone, location } = savedSchedule;
+    void saveSchedule(schedulePayload(remaining, remaining.length > 0, timezone, location),
       'Deleting capture…');
   };
   row.append(detail, edit, remove);
@@ -1043,10 +1043,9 @@ function showSchedule(schedule) {
   $('schedule-times').replaceChildren(...rules.map(scheduleRow));
   $('schedule-empty').hidden = rules.length > 0;
   $('schedule-zone').value = (schedule.inheritsTimezone && localZone) || schedule.timezone;
-  $('schedule-enabled').checked = schedule.enabled;
   $('schedule-status').textContent = schedule.enabled
     ? 'Daily captures are on (' + schedule.timezone + ').'
-    : rules.length ? 'Daily captures are off.' : 'No daily captures scheduled.';
+    : rules.length ? 'Select Save schedule to activate these capture times.' : 'No daily captures scheduled.';
   nextCaptureAt = schedule.nextCaptureAt ?? null;
   showOutlook(schedule);
   void tickSchedule();
@@ -1122,16 +1121,14 @@ $('schedule-form').onsubmit = event => {
   event.preventDefault();
   if (!scheduleLoaded || $('schedule-fields').disabled) return;
   try {
-    const enabled = $('schedule-enabled').checked;
     const draft = draftRule();
     if (editingTime !== undefined && !draft) throw new Error('Choose a capture trigger.');
     const rules = scheduleRules(savedSchedule).filter(rule => rule !== editingTime);
     if (draft !== null) rules.push(draft);
-    if (enabled && !rules.length) throw new Error('Choose a capture trigger.');
     const needsLocation = rules.some(rule => typeof rule !== 'string') ||
       $('schedule-latitude').value !== '' || $('schedule-longitude').value !== '';
     const location = needsLocation ? solarLocation() : undefined;
-    void saveSchedule(schedulePayload(rules, enabled, $('schedule-zone').value.trim(), location), 'Saving schedule…');
+    void saveSchedule(schedulePayload(rules, rules.length > 0, $('schedule-zone').value.trim(), location), 'Saving schedule…');
   } catch (error) {
     $('schedule-status').textContent = error.message;
   }

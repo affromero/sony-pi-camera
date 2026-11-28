@@ -160,7 +160,7 @@ After admin sign-in, the shared site opens the same camera controls used on the 
 
 Open the administration menu from the camera controls. Under **Viewer invitations**, choose **Disconnect signed-in viewers** to sign out family and invitation sessions and stop their live previews. Family members can sign in again with their password, and unused invitations still work.
 
-Under **Scheduled captures**, add a time or select **Edit** beside a saved time, then select **Save schedule**. Select **×** next to a saved time and confirm to delete it. Deleting the last time turns daily captures off. Choose **Use my time zone** to use the browser's time zone. When the schedule is enabled, the countdown shows the Pi timer's next run.
+Under **Scheduled captures**, add a time or select **Edit** beside a saved time, then select **Save schedule** to activate it. Select **×** next to a saved time and confirm to delete it. Deleting the last time turns daily captures off. Choose **Use my time zone** to use the browser's time zone. The countdown shows the Pi timer's next run.
 
 Choose **Sunrise** or **Sunset** to capture at a solar event. Enter the camera coordinates and the number of minutes before or after the event. **Preview next time** calculates the next occurrence without saving or taking a photo. Solar triggers use the schedule's time zone to choose the date, and calculations work offline. The Pi refreshes the upcoming solar times at boot and daily. A missed capture is skipped if the Pi was off.
 
