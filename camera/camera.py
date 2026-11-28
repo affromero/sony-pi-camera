@@ -449,8 +449,9 @@ def schedule_request(message: dict) -> dict:
 
 @lru_cache(maxsize=8)
 def fetch_tomorrow_forecast(
-    lat: float, lon: float, zone: str, date: str, cache_window: int
+    key: tuple[float, float, str, str, int],
 ) -> dict:
+    lat, lon, zone, date = key[:4]
     fields = (
         "weather_code",
         "temperature_2m_min",
@@ -482,7 +483,7 @@ def tomorrow_forecast(
     lat: float, lon: float, zone: str, date: str, cache_window: int
 ) -> dict | None:
     try:
-        return fetch_tomorrow_forecast(lat, lon, zone, date, cache_window)
+        return fetch_tomorrow_forecast((lat, lon, zone, date, cache_window))
     except (
         HTTPException,
         OSError,
