@@ -276,9 +276,9 @@ test('keeps viewer invitations read-only and admin AI credentials private', { ti
       }).end('jpeg');
     }
     if (req.url === '/api/photos/nonempty%2Fa%20%25.raw') return res.end('original');
-    if (req.url === '/api/photos/street.jpg')
-      return res.writeHead(200, { 'Content-Type': 'image/jpeg' }).end('original jpeg');
-    if (req.url === '/api/photos/unsafe.svg')
+    if (req.url === '/api/photos/street.jpg?display=1')
+      return res.writeHead(200, { 'Content-Type': 'image/jpeg' }).end('display jpeg');
+    if (req.url === '/api/photos/unsafe.svg?display=1')
       return res.writeHead(200, { 'Content-Type': 'image/svg+xml' }).end('<svg/>');
     if (req.url === '/api/thumbnail/nonempty%2Fa%20%25.raw')
       return res.writeHead(200, { 'Content-Type': 'image/jpeg' }).end('thumbnail');
@@ -384,7 +384,7 @@ test('keeps viewer invitations read-only and admin AI credentials private', { ti
   assert.equal(original.headers['content-type'], 'image/jpeg');
   assert.match(original.headers['content-disposition'], /^inline/);
   assert.match(original.headers['cache-control'], /no-store/);
-  assert.equal(original.data.toString(), 'original jpeg');
+  assert.equal(original.data.toString(), 'display jpeg');
   assert.equal((await guestGet('/photo/unsafe.svg', guest)).status, 415);
   assert.equal((await guestGet('/photo/%2e%2e%2Ffile', guest)).status, 404);
   const guestStream = await new Promise((resolve, reject) => {

@@ -148,8 +148,13 @@ async function openPhoto(name, encoded, bytes) {
     }
     showPhotoProgress(received, total, true);
     photoUrl = URL.createObjectURL(new Blob(chunks, {type: response.headers.get('Content-Type')}));
-    photoFull.src = photoUrl;
-    await photoFull.decode();
+    await new Promise((resolve, reject) => {
+      const signal = request.signal;
+      photoFull.addEventListener('load', resolve, {once:true, signal});
+      photoFull.addEventListener('error', reject, {once:true, signal});
+      signal.addEventListener('abort', resolve, {once:true});
+      photoFull.src = photoUrl;
+    });
     if (!request.signal.aborted) photoFull.hidden = false;
   } catch {
     if (!request.signal.aborted)
@@ -170,7 +175,7 @@ photoDialog.addEventListener('click', (event) => {
 });
 
 function renderPhotos(entries) {
-  const rows = entries.map(({ name, bytes }) => {
+  const rows = entries.map(({ name, bytes, scheduled }) => {
     const row = document.createElement('li');
     const link = document.createElement('button');
     const encoded = encodeURIComponent(name);
@@ -194,6 +199,12 @@ function renderPhotos(entries) {
     size.textContent = fileSize(bytes);
     const actions = document.createElement('div');
     actions.className = 'photo-actions';
+    if (scheduled) {
+      const badge = document.createElement('span');
+      badge.className = 'scheduled-badge';
+      badge.textContent = 'Scheduled';
+      actions.append(badge);
+    }
     actions.append(size);
     row.append(link, actions);
     return row;

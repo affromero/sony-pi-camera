@@ -8,6 +8,7 @@ import json
 import mimetypes
 import os
 import pwd
+import re
 import secrets
 import socket
 import ssl
@@ -28,6 +29,7 @@ from urllib.parse import unquote, urlencode, urlsplit
 from urllib.request import Request, urlopen
 
 from PIL import Image, ImageOps
+from PIL.MpoImagePlugin import MpoImageFile
 
 if TYPE_CHECKING or __package__:
     from camera.rust_preview import RustPreview
@@ -342,6 +344,12 @@ def gallery_details(root):
                         "name": prefix + name,
                         "saved": info.st_mtime,
                         "bytes": info.st_size,
+                        "scheduled": bool(
+                            re.fullmatch(
+                                r"\d{8}-\d{6}-[0-9a-f]{8}-scheduled(?:-framed)?\.[A-Za-z0-9]+",
+                                name,
+                            )
+                        ),
                     }
                 )
     return sorted(entries, key=lambda entry: entry["saved"], reverse=True)
@@ -382,7 +390,9 @@ def save_framed_jpeg(source: Path, target: Path, state: dict) -> None:
         )
 
 
-def capture_photo(expected: dict | None) -> list[str]:
+def capture_photo(
+    expected: dict | None, *, scheduled: bool = False
+) -> list[str]:
     state = viewport(command("--get-config", "d22f", "--get-config", "d230"))
     if expected is not None and (
         not isinstance(expected, dict)
@@ -397,6 +407,8 @@ def capture_photo(expected: dict | None) -> list[str]:
     ):
         raise ValueError("Select JPEG or RAW + JPEG for a magnified capture.")
     name = time.strftime("%Y%m%d-%H%M%S") + "-" + secrets.token_hex(4)
+    if scheduled:
+        name += "-scheduled"
     with tempfile.TemporaryDirectory(prefix=".capture-", dir=PHOTOS) as tmp:
         directory = Path(tmp)
         output = command(
@@ -495,6 +507,39 @@ def tomorrow_forecast(
         return None
 
 
+def jpeg_display_ranges(file: io.BufferedReader) -> list[tuple[int, int]]:
+    size = os.fstat(file.fileno()).st_size
+    with Image.open(file) as image:
+        if not isinstance(image, MpoImageFile):
+            return [(0, size)]
+        if image.mpinfo is None:
+            raise ValueError(
+                "The camera's multi-picture JPEG has no frame index."
+            )
+        frame_end = image.mpinfo[0xB002][0]["Size"]
+    # Remove the MP Index segment while preserving the first frame's JPEG data.
+    file.seek(2)
+    while file.tell() < min(frame_end, size):
+        start = file.tell()
+        header = file.read(4)
+        if len(header) != 4 or header[0] != 0xFF or header[1] in (0xDA, 0xD9):
+            break
+        end = start + 2 + int.from_bytes(header[2:], "big")
+        if not start + 4 <= end < frame_end <= size:
+            break
+        if (
+            header[1] == 0xE2
+            and end >= start + 8
+            and file.read(4) == b"MPF\x00"
+        ):
+            file.seek(frame_end - 2)
+            if file.read(2) == b"\xff\xd9":
+                return [(0, start), (end, frame_end - end)]
+            break
+        file.seek(end)
+    raise ValueError("The camera's multi-picture JPEG could not be displayed.")
+
+
 def schedule_forecast(settings: dict) -> dict | None:
     location = settings.get("location")
     day = settings.get("tomorrowSun")
@@ -590,12 +635,20 @@ class Handler(BaseHTTPRequestHandler):
         return cast(CameraHTTPServer, self.server)
 
     def send(
-        self, body, content_type="application/json", status=200, headers=None
+        self,
+        body,
+        content_type="application/json",
+        status=200,
+        headers=None,
+        ranges=None,
     ):
         if isinstance(body, (dict, list)):
             body = json.dumps(body).encode()
         stream = isinstance(body, io.BufferedReader)
-        length = os.fstat(body.fileno()).st_size if stream else len(body)
+        sections = (
+            ranges or [(0, os.fstat(body.fileno()).st_size)] if stream else []
+        )
+        length = sum(count for _, count in sections) if stream else len(body)
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(length))
@@ -620,8 +673,11 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         if stream:
             try:
-                if length:
-                    self.connection.sendfile(body, count=length)
+                for offset, count in sections:
+                    if count:
+                        self.connection.sendfile(
+                            body, offset=offset, count=count
+                        )
             except OSError:
                 self.close_connection = True
         else:
@@ -735,6 +791,10 @@ class Handler(BaseHTTPRequestHandler):
                         original,
                         mimetypes.guess_type(item.name)[0]
                         or "application/octet-stream",
+                        ranges=jpeg_display_ranges(original)
+                        if urlsplit(self.path).query == "display=1"
+                        and item.suffix.lower() in (".jpg", ".jpeg")
+                        else None,
                     )
             else:
                 self.send({"error": "Not found"}, status=404)
@@ -776,9 +836,12 @@ class Handler(BaseHTTPRequestHandler):
                 )
             elif path == "/api/schedule/address":
                 self.send({"matches": address_matches(data)})
-            elif path == "/api/capture":
+            elif path in ("/api/capture", "/api/capture/scheduled"):
                 with camera_control():
-                    files = capture_photo(data.get("viewport"))
+                    files = capture_photo(
+                        data.get("viewport"),
+                        scheduled=path.endswith("/scheduled"),
+                    )
                 self.send({"ok": True, "files": files})
             elif path == "/api/magnifier":
                 action = data.get("action")

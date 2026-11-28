@@ -56,13 +56,13 @@ def log_advice(port: int, token: str, state_dir: Path) -> None:
         print("AI advice:", json.dumps(advice), flush=True)
 
 
-def capture(port: int, token: str) -> list[str]:
+def capture(port: int, token: str, *, scheduled: bool) -> list[str]:
     for attempt in range(13):
         connection = HTTPConnection("127.0.0.1", port, timeout=240)
         try:
             connection.request(
                 "POST",
-                "/api/capture",
+                "/api/capture/scheduled" if scheduled else "/api/capture",
                 body=b"{}",
                 headers={
                     "Content-Type": "application/json",
@@ -83,7 +83,9 @@ def capture(port: int, token: str) -> list[str]:
     raise RuntimeError("The camera was busy for one minute")
 
 
-def run(config_dir: Path, port: int, state_dir: Path | None) -> list[str]:
+def run(
+    config_dir: Path, port: int, state_dir: Path | None, *, scheduled: bool
+) -> list[str]:
     token = (config_dir / "camera-token").read_text().strip()
     if state_dir is not None:
         try:
@@ -121,16 +123,19 @@ def run(config_dir: Path, port: int, state_dir: Path | None) -> list[str]:
                         file=sys.stderr,
                         flush=True,
                     )
-    return capture(port, token)
+    return capture(port, token, scheduled=scheduled)
 
 
 if __name__ == "__main__":
     try:
         state_dir = os.getenv("STATE_DIRECTORY")
+        trigger = os.getenv("TRIGGER_UNIT", "")
         files = run(
             Path.home() / ".config/sony-pi-camera",
             int(os.getenv("PI_CAMERA_PORT", "8765")),
             Path(state_dir) if state_dir else None,
+            scheduled=trigger.startswith("sony-pi-capture@")
+            and trigger.endswith(".timer"),
         )
         print("Saved", ", ".join(files))
     except subprocess.TimeoutExpired:

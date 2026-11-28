@@ -371,14 +371,14 @@ export async function createViewer({ origin, directory, mode = 'admin', inviteOr
       }
       return send(response, 200, content, type);
     }
-    const controlPhoto = request.method === 'GET' && /^\/api\/(photos|thumbnail)\/([^/?]+)$/.exec(path);
+    const controlPhoto = request.method === 'GET' && /^\/api\/(photos|thumbnail)\/([^/?]+)(\?display=1)?$/.exec(path);
     if (controlRoutes.has(route) || controlPhoto) {
       await authenticate(request, true);
       const name = controlPhoto && photoName(controlPhoto[2]);
       if (controlPhoto && !name) return send(response, 404, { error: 'Photo unavailable.' });
       const body = request.method === 'POST' ? await readJson(request, 4096) : undefined;
       const result = controlPhoto?.[1] === 'photos'
-        ? await camera.download(name, response, /\.(jpe?g|png|webp)$/i.test(name))
+        ? await camera.download(name, response, Boolean(controlPhoto[3]))
         : await camera.cameraControl(path, response, body);
       if (result !== 200) send(response, result, { error: 'Camera request failed.' });
       return;

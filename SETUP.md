@@ -120,6 +120,8 @@ The live view requests one JPEG at a time over USB. When you focus, change a set
 - The dashboard polls the battery level, shooting mode and settings. APS-C crop is adjustable on the body and displayed in the browser. Aperture choices currently assume the tested Sigma lens.
 - Press the shutter in a magnified view to save that framing as a JPEG in the Pi gallery. The Pi crops the camera's full-resolution JPEG at its native pixel size, so a tighter crop has fewer pixels. Choose a JPEG or RAW + JPEG capture setting for framed shots. At **Full frame**, the shutter downloads the camera files directly.
 - Existing SD card folders are unavailable over this body's PC Remote connection. The gallery also picks up photos transferred into the same directory.
+- Open a photo to view its full-resolution JPEG frame, or use **Download** to save the untouched camera file. The **Scheduled** badge marks captures triggered by the timer.
+- Select **Sleep preview** to stop the live feed until you select **Resume preview**.
 
 ## Share the live camera
 

@@ -22,6 +22,8 @@ let operation = '';
 let externalBusy = false;
 let pendingPreview = null;
 let previewTimer;
+let previewRequest;
+let previewAsleep = false;
 let previewDelay = frameInterval;
 let imageUrl;
 let modalUrl;
@@ -187,9 +189,9 @@ async function api(path, options = {}) {
 async function post(path, value, signal) { return api(path, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(value), signal}); }
 function schedulePreview(delay = previewDelay) {
   clearTimeout(previewTimer);
-  if (!connected() || document.hidden || operation || pendingPreview) return;
+  if (!connected() || document.hidden || previewAsleep || operation || pendingPreview) return;
   previewTimer = setTimeout(async () => {
-    if (document.hidden || operation) return;
+    if (document.hidden || previewAsleep || operation) return;
     pendingPreview = readPreview(false);
     try {
       await pendingPreview;
@@ -204,13 +206,15 @@ async function refreshAfterFramingChange() {
   updateShutter();
   surface.disabled = true;
   $('mag-select').disabled = $('mag-exit').disabled = true;
-  if (!document.hidden) await readPreview(true);
+  if (!document.hidden && !previewAsleep) await readPreview(true);
 }
 async function readPreview(afterOperation) {
   let url;
-  const stale = () => document.hidden || (operation && !afterOperation);
+  const request = new AbortController();
+  previewRequest = request;
+  const stale = () => request.signal.aborted || document.hidden || previewAsleep || (operation && !afterOperation);
   try {
-    const response = await api('/api/preview');
+    const response = await api('/api/preview', {signal:request.signal});
     const blob = await response.blob();
     if (stale()) return;
     const frame = new Image();
@@ -235,8 +239,8 @@ async function readPreview(afterOperation) {
     }
     previewDelay = frameInterval;
   } catch (error) {
-    previewDelay = Math.min(4000, Math.max(500, previewDelay * 2));
     if (stale() || error.status === 409) return;
+    previewDelay = Math.min(4000, Math.max(500, previewDelay * 2));
     displayedViewport = null;
     updateShutter();
     if (selecting) selectionMode(false);
@@ -250,9 +254,34 @@ async function readPreview(afterOperation) {
     $('preview-message').hidden = false;
     $('preview-message').textContent = 'Preview unavailable';
   } finally {
+    if (previewRequest === request) previewRequest = undefined;
     if (url) URL.revokeObjectURL(url);
   }
 }
+const sleepPreview = $('admin-preview-sleep');
+sleepPreview.onclick = () => {
+  previewAsleep = !previewAsleep;
+  sleepPreview.textContent = previewAsleep ? 'Resume preview' : 'Sleep preview';
+  sleepPreview.title = previewAsleep ? 'Resume the live camera preview' : 'Pause live preview until you resume it';
+  $('preview-message').hidden = false;
+  $('preview-message').textContent = previewAsleep ? 'Preview asleep' : 'Connecting to camera…';
+  $('preview-status').textContent = previewAsleep ? 'Paused' : 'Live preview';
+  if (!previewAsleep) {
+    schedulePreview(0);
+    return;
+  }
+  clearTimeout(previewTimer);
+  previewRequest?.abort();
+  displayedViewport = null;
+  selectionMode(false);
+  surface.hidden = true;
+  overview.hidden = true;
+  $('focus-marker').hidden = true;
+  $('mag-select').disabled = $('mag-exit').disabled = true;
+  $('preview').removeAttribute('src');
+  if (imageUrl) URL.revokeObjectURL(imageUrl);
+  imageUrl = null;
+};
 const labels = {'iso':'ISO','shutterspeed':'Shutter speed','f-number':'Aperture','whitebalance':'White balance','focusmode':'Focus mode','exposurecompensation':'Exposure compensation','imagequality':'Image quality'};
 labels.sensorcrop = 'APS-C crop (1.5×)';
 labels.focusarea = 'Focus area';
@@ -287,7 +316,7 @@ $('focus-target').onclick = async event => {
 async function downloadPhoto(name) {
   const blob = await (await api(`/api/photos/${encodeURIComponent(name)}`)).blob();
   const url = URL.createObjectURL(blob); const link = document.createElement('a');
-  link.href = url; link.download = name; link.click();
+  link.href = url; link.download = name.split('/').at(-1); link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 function fileSize(bytes) {
@@ -322,8 +351,11 @@ async function openPhoto(name, bytes) {
   $('photo-loading').hidden = false;
   photoProgress(0, bytes);
   $('modal-photo').removeAttribute('src'); $('photo-dialog').showModal();
+  const img = $('modal-photo');
+  const encoded = encodeURIComponent(name);
+  const display = /\.(jpe?g|png|webp)$/i.test(name);
   try {
-    const response = await api(`/api/photos/${encodeURIComponent(name)}`, {signal:request.signal});
+    const response = await api(display ? `/api/photos/${encoded}?display=1` : `/api/thumbnail/${encoded}`, {signal:request.signal});
     const total = Number(response.headers.get('Content-Length'));
     const reader = response.body.getReader();
     const chunks = [];
@@ -337,15 +369,19 @@ async function openPhoto(name, bytes) {
       photoProgress(received, total);
     }
     modalUrl = URL.createObjectURL(new Blob(chunks, {type:response.headers.get('Content-Type')}));
-    const img = $('modal-photo');
-    img.src = modalUrl;
-    await img.decode();
+    await new Promise((resolve, reject) => {
+      const signal = request.signal;
+      img.addEventListener('load', resolve, {once:true, signal});
+      img.addEventListener('error', reject, {once:true, signal});
+      signal.addEventListener('abort', resolve, {once:true});
+      img.src = modalUrl;
+    });
     if (request.signal.aborted) return;
-    $('modal-name').textContent = title + ' · ' + img.naturalWidth + ' × ' + img.naturalHeight;
+    $('modal-name').textContent = title + ' · ' + (display ? img.naturalWidth + ' × ' + img.naturalHeight : 'Embedded preview');
     $('modal-zoom').disabled = false;
-  } catch (error) {
+  } catch {
     if (request.signal.aborted) return;
-    $('modal-status').textContent = 'Unable to display original. ' + error.message;
+    $('modal-status').textContent = 'Preview unavailable. You can still download the original.';
     $('modal-status').hidden = false;
   } finally {
     if (originalRequest === request) $('photo-loading').hidden = true;
@@ -467,7 +503,7 @@ function renderPhotos() {
   grid.dataset.signature = signature;
   for (const img of grid.querySelectorAll('img[src]')) URL.revokeObjectURL(img.src);
   grid.replaceChildren();
-  for (const {name, saved, bytes} of visible) {
+  for (const {name, saved, bytes, scheduled} of visible) {
       const item = document.createElement('div'); item.className = 'photo';
       const thumb = document.createElement('img'); thumb.alt = ''; thumb.loading = 'lazy';
       api(`/api/thumbnail/${encodeURIComponent(name)}`).then(r => r.blob()).then(blob => { if (thumb.isConnected) thumb.src = URL.createObjectURL(blob); }).catch(() => { thumb.remove(); });
@@ -479,7 +515,14 @@ function renderPhotos() {
       const download = document.createElement('button'); download.textContent = 'Download'; download.title = 'Download the original photo file'; download.onclick = () => downloadPhoto(name).catch(error => { $('status').textContent = error.message; });
       const remove = document.createElement('button'); remove.className = 'delete'; remove.textContent = 'Delete'; remove.title = 'Delete this saved copy from the Pi'; remove.onclick = async () => { if (confirm(`Delete ${name} from the Pi?`)) { try { await post('/api/delete',{name}); await photos(); } catch (error) { $('status').textContent = error.message; } } };
       const size = document.createElement('small'); size.textContent = fileSize(bytes);
-      item.append(view,filename,time,size,document.createElement('br'),download,remove); grid.append(item);
+      item.append(view, filename);
+      if (scheduled) {
+        const badge = document.createElement('span');
+        badge.className = 'scheduled-badge';
+        badge.textContent = 'Scheduled';
+        item.append(badge);
+      }
+      item.append(time,size,document.createElement('br'),download,remove); grid.append(item);
     }
 }
 async function photos() {

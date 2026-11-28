@@ -67,7 +67,7 @@ export function createCamera({ port, cameraToken }) {
     const cancel = () => disconnect.abort();
     response.once('close', cancel);
     try {
-      const path = '/api/photos/' + encodeURIComponent(name);
+      const path = '/api/photos/' + encodeURIComponent(name) + (inline ? '?display=1' : '');
       const signal = AbortSignal.any([disconnect.signal, AbortSignal.timeout(300000)]);
       const result = await request(path, signal);
       if (!result.ok || !result.body) {

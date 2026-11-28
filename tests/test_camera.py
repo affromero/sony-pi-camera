@@ -431,13 +431,40 @@ class CameraTest(unittest.TestCase):
         self.addCleanup(saved.unlink)
         self.assertEqual(saved.read_bytes(), original.read_bytes())
 
+    def test_display_opens_primary_mpo_frame_and_preserves_original_download(
+        self,
+    ):
+        name = "multi-picture.jpg"
+        saved = self.home / "camera-photos" / name
+        self.addCleanup(saved.unlink)
+        Image.new("RGB", (96, 64), "blue").save(
+            saved,
+            format="MPO",
+            save_all=True,
+            append_images=[Image.new("RGB", (24, 16), "red")],
+        )
+        with self.request(
+            "/api/photos/" + name + "?display=1", self.token
+        ) as response:
+            with Image.open(io.BytesIO(response.read())) as image:
+                self.assertEqual(image.format, "JPEG")
+                self.assertEqual(image.size, (96, 64))
+                self.assertEqual(
+                    image.getchannel("B").getextrema(), (254, 254)
+                )
+        with self.request("/api/photos/" + name, self.token) as response:
+            self.assertEqual(response.read(), saved.read_bytes())
+
     def test_scheduled_job_saves_a_gallery_photo(self):
         (self.home / "viewport").write_text("Current: 0\nCurrent: 20971734")
         Image.new("RGB", (72, 48)).save(self.home / "original.jpg")
         job = subprocess.run(
             [sys.executable, str(SERVER.with_name("scheduled_capture.py"))],
             env=dict(
-                os.environ, HOME=str(self.home), PI_CAMERA_PORT=str(self.port)
+                os.environ,
+                HOME=str(self.home),
+                PI_CAMERA_PORT=str(self.port),
+                TRIGGER_UNIT="sony-pi-capture@camera.timer",
             ),
             check=True,
             capture_output=True,
@@ -449,6 +476,11 @@ class CameraTest(unittest.TestCase):
         self.addCleanup(saved.unlink)
         with self.request("/api/photos", self.token) as response:
             self.assertIn(name, json.load(response))
+        with self.request("/api/photos?details=1", self.token) as response:
+            entry = next(
+                item for item in json.load(response) if item["name"] == name
+            )
+            self.assertTrue(entry["scheduled"])
 
     def test_delete_requires_same_origin_and_deletes_selected_photo(self):
         with self.assertRaises(urllib.error.HTTPError) as error:
@@ -485,7 +517,13 @@ class CameraTest(unittest.TestCase):
                 entries = json.load(result)
             self.assertEqual(entries[0]["name"], "example.jpg")
             self.assertEqual(
-                entries[-1], {"name": str(relative), "saved": 100, "bytes": 8}
+                entries[-1],
+                {
+                    "name": str(relative),
+                    "saved": 100,
+                    "bytes": 8,
+                    "scheduled": False,
+                },
             )
             self.assertEqual(
                 [

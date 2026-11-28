@@ -114,6 +114,8 @@ button[type="submit"]:hover, #save-passkey:hover { background: #004fa8; }
   margin-top: .35rem;
 }
 .photo-actions span { white-space: nowrap; }
+.photo-actions .scheduled-badge { padding: .15rem .5rem; border-radius: 999px;
+  background: #e6eefc; color: #23487a; font-size: .75rem; font-weight: 650; }
 #photo-dialog { width: min(72rem, calc(100% - 2rem)); max-height: calc(100dvh - 2rem);
   padding: 0; border: 1px solid var(--line); border-radius: 1rem; background: var(--paper); color: var(--ink); }
 #photo-dialog[open] { display: grid; grid-template-rows: auto minmax(0, 1fr); height: min(52rem, calc(100dvh - 2rem)); }
